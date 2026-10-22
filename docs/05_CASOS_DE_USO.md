@@ -1,132 +1,129 @@
-# 5. Casos de Uso
+# 5. Use Cases
 
-Fuente: funcionalidades habituales de software de facturación electrónica del mercado peruano (p. ej. Nubefact, usuario DEMO) y
-quejas frecuentes de usuarios (rechazos por montos mal calculados, correlativos duplicados, caídas de conexión, dificultad para
-anular). Cada caso se enlaza con reglas (RN), endpoints (EP) y normas (N).
+Source: standard features found in Peruvian electronic invoicing systems (e.g., Nubefact, DEMO environment) and common user complaints
+(rejections due to rounding errors in totals, duplicate sequence numbers, connection drops, difficulty voiding documents). Each use case
+links to business rules (RN), endpoints (EP), and statutory regulations (N).
 
-## 1. Actores
+## 1. Actors
 
-| Actor | Descripción |
+| Actor | Description |
 | :--- | :--- |
-| Vendedor / Cajero | Emite boletas y facturas en tienda (Windows o Android) |
-| Administrador | Configura emisor, series, certificado, usuarios, productos |
-| Contador | Consulta estados, anula, emite notas, exporta registros |
-| SUNAT / OSE | Sistema externo que valida y devuelve el CDR |
-| Planificador | Proceso automático (reintentos, resumen diario) |
+| Salesperson / Cashier | Issues boletas and facturas at the store point of sale (Windows or Android) |
+| Administrator | Configures issuer details, series, digital certificate, users, and product catalog |
+| Accountant | Monitors document statuses, voids documents, issues credit/debit notes, exports accounting registers |
+| SUNAT / OSE | External tax administration / OSE system that validates documents and returns the CDR |
+| Scheduler | Automated background worker process (retries, daily summary submission) |
 
-## 2. Diagrama
+## 2. Diagram
 
 ```mermaid
 flowchart LR
-    VEN([Vendedor])
-    ADM([Administrador])
-    CON([Contador])
+    SAL([Salesperson])
+    ADM([Administrator])
+    ACC([Accountant])
     SUN([SUNAT / OSE])
-    JOB([Planificador])
-    subgraph SIS[Sistema de Facturación ABC]
-        CU01((CU-01 Emitir factura))
-        CU02((CU-02 Emitir boleta))
-        CU03((CU-03 Emitir nota de crédito))
-        CU04((CU-04 Emitir nota de débito))
-        CU05((CU-05 Anular / comunicación de baja))
-        CU06((CU-06 Enviar resumen diario de boletas))
-        CU07((CU-07 Consultar estado y CDR))
-        CU08((CU-08 Descargar PDF/XML y enviar por correo))
-        CU09((CU-09 Gestionar clientes y validar RUC))
-        CU10((CU-10 Gestionar productos))
-        CU11((CU-11 Configurar emisor, series y certificado))
-        CU12((CU-12 Migrar datos legados))
-        CU13((CU-13 Reenviar pendientes))
-        CU14((CU-14 Reportes y registro de ventas))
+    JOB([Scheduler])
+    subgraph SIS[ABC Invoicing System]
+        CU01((UC-01 Issue factura))
+        CU02((UC-02 Issue boleta))
+        CU03((UC-03 Issue credit note))
+        CU04((UC-04 Issue debit note))
+        CU05((UC-05 Void / comunicación de baja))
+        CU06((UC-06 Submit daily summary of boletas))
+        CU07((UC-07 Query status and CDR))
+        CU08((UC-08 Download PDF/XML and send email))
+        CU09((UC-09 Manage customers and validate RUC))
+        CU10((UC-10 Manage products))
+        CU11((UC-11 Configure issuer, series, certificate))
+        CU12((UC-12 Migrate legacy data))
+        CU13((UC-13 Resubmit pending documents))
+        CU14((UC-14 Reports and sales register))
     end
-    VEN --> CU01 & CU02 & CU08 & CU09
-    CON --> CU03 & CU04 & CU05 & CU07 & CU14
+    SAL --> CU01 & CU02 & CU08 & CU09
+    ACC --> CU03 & CU04 & CU05 & CU07 & CU14
     ADM --> CU10 & CU11 & CU12
     JOB --> CU06 & CU13
     CU01 & CU02 & CU03 & CU04 & CU05 & CU06 & CU07 & CU13 --> SUN
 ```
 
-## 3. Catálogo de casos de uso
+## 3. Use Case Catalog
 
-| ID | Caso de uso | Actor | Prioridad | Reglas | Endpoint |
+| ID | Use Case | Actor | Priority | Business Rules | Endpoint |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| CU-01 | Emitir factura | Vendedor | Alta | RN-01..RN-12 | EP-01 |
-| CU-02 | Emitir boleta de venta | Vendedor | Alta | RN-02..RN-08, RN-11 | EP-01 |
-| CU-03 | Emitir nota de crédito (Cat. 09) | Contador | Alta | RN-03, RN-07, RN-08, RN-12 | EP-05 |
-| CU-04 | Emitir nota de débito (Cat. 10) | Contador | Media | RN-03, RN-07, RN-08 | EP-05 |
-| CU-05 | Anular comprobante (comunicación de baja) | Contador | Alta | RN-12 | EP-06 |
-| CU-06 | Enviar resumen diario de boletas | Planificador | Alta | RN-05 | EP-07 |
-| CU-07 | Consultar estado y CDR | Contador | Alta | — | EP-02, EP-03 |
-| CU-08 | Descargar PDF / XML / CDR y enviar por correo | Vendedor | Media | — | EP-04 |
-| CU-09 | Gestionar clientes y validar RUC/DNI | Vendedor | Alta | RN-01, RN-02 | EP-08, EP-09 |
-| CU-10 | Gestionar productos (afectación IGV, ISC Cat. 08, ICBPER) | Administrador | Alta | RN-07 | EP-10 |
-| CU-11 | Configurar emisor, series y certificado digital | Administrador | Alta | RN-01, RN-03 | EP-11, EP-12 |
-| CU-12 | Migrar datos del software legado | Administrador | Alta | RN-13 | EP-13..EP-15 |
-| CU-13 | Reenviar comprobantes pendientes (sin conexión) | Planificador | Alta | — | EP-16 |
-| CU-14 | Reportes de ventas e inventario (registro de ventas, kardex) | Contador | Media | — | EP-17 |
+| UC-01 | Issue factura | Salesperson | High | RN-01..RN-12 | EP-01 |
+| UC-02 | Issue boleta de venta | Salesperson | High | RN-02..RN-08, RN-11 | EP-01 |
+| UC-03 | Issue credit note (Cat. 09) | Accountant | High | RN-03, RN-07, RN-08, RN-12 | EP-05 |
+| UC-04 | Issue debit note (Cat. 10) | Accountant | Medium | RN-03, RN-07, RN-08 | EP-05 |
+| UC-05 | Void document (comunicación de baja) | Accountant | High | RN-12 | EP-06 |
+| UC-06 | Submit daily summary of boletas | Scheduler | High | RN-05 | EP-07 |
+| UC-07 | Query status and CDR | Accountant | High | — | EP-02, EP-03 |
+| UC-08 | Download PDF / XML / CDR and send by email | Salesperson | Medium | — | EP-04 |
+| UC-09 | Manage customers and validate RUC/DNI | Salesperson | High | RN-01, RN-02 | EP-08, EP-09 |
+| UC-10 | Manage products (IGV affectation, ISC Cat. 08, ICBPER) | Administrator | High | RN-07 | EP-10 |
+| UC-11 | Configure issuer, series, and digital certificate | Administrator | High | RN-01, RN-03 | EP-11, EP-12 |
+| UC-12 | Migrate legacy software data | Administrator | High | RN-13 | EP-13..EP-15 |
+| UC-13 | Resubmit pending documents (offline recovery) | Scheduler | High | — | EP-16 |
+| UC-14 | Sales and inventory reports (Sales register, Kardex) | Accountant | Medium | — | EP-17 |
 
-## 4. Especificación de casos principales
+## 4. Key Use Case Specifications
 
-### CU-01 Emitir factura
+### UC-01 Issue Factura
 
-- **Precondiciones:** emisor configurado con certificado vigente; serie `F###` activa; usuario autenticado.
-- **Flujo principal:**
-  1. El vendedor busca o registra al cliente con RUC (CU-09); el sistema valida dígito verificador y estado en el padrón (RN-01/RN-02).
-  2. Agrega ítems desde el catálogo de productos; el sistema propone unidad, afectación IGV, ISC (Cat. 08) e ICBPER.
-  3. Elige moneda y forma de pago (contado / crédito con cuotas).
-  4. El sistema calcula tributos y totales (RN-07, RN-08) y los muestra antes de confirmar.
-  5. Al confirmar: asigna correlativo (RN-04), genera XML UBL 2.1 Perú, valida XSD y reglas SUNAT (RN-11), firma y envía al OSE/SUNAT.
-  6. Recibe el CDR, actualiza el estado, registra la SALIDA de inventario y muestra el PDF con código QR.
-- **Flujos alternos:**
-  - 1a. RUC inválido o en estado BAJA/NO HABIDO → se bloquea la emisión (`DOC_CLIENTE_INVALIDO`, RN-02).
-  - 5a. Sin conexión → estado `PENDIENTE_ENVIO`; el comprobante se entrega y CU-13 lo reenvía.
-  - 6a. CDR de rechazo (2000–3999) → estado `RECHAZADO`, se muestran el código y el motivo; el correlativo no se reutiliza.
-  - 6b. CDR con observaciones (≥ 4000) → `ACEPTADO_CON_OBS`.
-- **Postcondición:** comprobante persistido con XML, hash y CDR; movimiento de inventario registrado.
+- **Preconditions:** Issuer configured with active digital certificate; active `F###` series; user authenticated.
+- **Main Flow:**
+  1. Salesperson searches for or registers the customer with RUC (UC-09); system verifies modulo 11 check digit and tax status in the SUNAT registry (RN-01/RN-02).
+  2. Adds items from the product catalog; system automatically suggests unit, IGV affectation, ISC (Cat. 08), and ICBPER tax rates.
+  3. Selects currency and payment method (contado / crédito with installment schedule).
+  4. System computes taxes and monetary totals (RN-07, RN-08) and displays them for confirmation.
+  5. Upon confirmation: assigns the next sequence number (RN-04), generates UBL 2.1 Peru XML, validates against XSD and SUNAT rules (RN-11), signs via XML-DSig, and transmits to OSE/SUNAT.
+  6. Receives the CDR receipt, updates document state, triggers inventory `SALIDA`, and displays invoice PDF with required QR code.
+- **Alternate Flows:**
+  - 1a. Invalid RUC or BAJA/NO HABIDO status → issuance blocked (`DOC_CLIENTE_INVALIDO`, RN-02).
+  - 5a. No internet connection → state set to `PENDIENTE_ENVIO`; invoice ticket is printed for the customer, and UC-13 background worker queues resubmission.
+  - 6a. CDR rejection (2000–3999) → state updated to `RECHAZADO`, error code and description displayed; sequence number cannot be reused.
+  - 6b. CDR with observations (≥ 4000) → state updated to `ACEPTADO_CON_OBS`.
+- **Postcondition:** Document persisted with XML, cryptographic hash, and CDR; inventory ledger movement recorded.
 
-### CU-02 Emitir boleta
+### UC-02 Issue Boleta
 
-Igual que CU-01 con serie `B###`; cliente opcional (tipo doc. `-` Varios) salvo que el importe supere el umbral (RN-06).
-Puede enviarse individualmente o mediante el resumen diario (CU-06).
+Follows the same flow as UC-01 using a `B###` series; customer identification is optional (document type `-` Varios) unless the total amount exceeds the statutory legal threshold (RN-06). Can be transmitted individually or bundled via daily summary (UC-06).
 
-### CU-03 Emitir nota de crédito
+### UC-03 Issue Credit Note
 
-- **Precondición:** documento afectado en estado `ACEPTADO` o `ACEPTADO_CON_OBS`.
-- **Flujo:** el contador selecciona el comprobante, elige el motivo (Cat. 09: `01` anulación de la operación, `06` devolución total,
-  `07` devolución por ítem, …), ajusta ítems/montos; el sistema referencia el documento (`cac:BillingReference`,
-  `cac:DiscrepancyResponse`), firma y envía.
-- **Alterno:** monto de la nota mayor que el del documento afectado → error de validación.
+- **Precondition:** Affected document exists in `ACEPTADO` or `ACEPTADO_CON_OBS` state.
+- **Flow:** Accountant selects the document, chooses credit note reason (Cat. 09: `01` anulación de la operación, `06` devolución total, `07` devolución por ítem, …), adjusts items and credit amounts; system populates reference tags (`cac:BillingReference`, `cac:DiscrepancyResponse`), digitally signs, and transmits.
+- **Alternate:** Credit note amount exceeds original document balance → validation error.
 
-### CU-05 Anular comprobante
+### UC-05 Void Document (Comunicación de Baja)
 
-- **Factura:** comunicación de baja (`RA-AAAAMMDD-n`) mediante `sendSummary`, obtiene un ticket y luego consulta con `getStatus`.
-- **Boleta:** se informa en el resumen diario con estado "anulado".
-- **Regla:** solo comprobantes aceptados que no hayan sido entregados/utilizados; si no, debe emitirse una nota de crédito.
+- **Factura:** Formal comunicación de baja (`RA-YYYYMMDD-n`) submitted via `sendSummary`, acquires a ticket number, and polls confirmation with `getStatus`.
+- **Boleta:** Reported as annulled within the daily summary submission.
+- **Rule:** Permitted only for accepted documents that have not been delivered/utilized; otherwise, a corrective credit note must be issued.
 
-### CU-12 Migrar datos del software legado
+### UC-12 Migrate Legacy Software Data
 
-- **Flujo principal:**
-  1. El administrador carga el export del legado (CSV o conexión a su base de datos).
-  2. El sistema calcula el hash del archivo; si ya existe un lote con ese hash, lo informa (idempotencia).
-  3. Copia las filas a staging y ejecuta las validaciones (fechas, cantidades, producto vacío).
-  4. Muestra una **vista previa** (dry-run): productos a crear, posibles duplicados, filas rechazadas.
-  5. El administrador confirma; el sistema carga productos y movimientos con `OrigenLegacy`.
-  6. Ejecuta la reconciliación (RN-13) y genera el reporte del lote.
-- **Alternos:** 3a. Filas inválidas → se excluyen y se listan con su motivo; el lote termina `CON_ERRORES` si el administrador lo acepta.
-  6a. Reconciliación fallida → el lote se revierte (`REVERTIDO`).
+- **Main Flow:**
+  1. Administrator loads legacy export file (CSV format or direct database connection).
+  2. System computes cryptographic SHA-256 hash of file; if a batch with that hash exists, warns user (idempotency guard).
+  3. Copies rows into staging table and executes validations (date formats, numeric quantities, non-empty product names).
+  4. Presents a **dry-run preview**: products to create, duplicate candidates, rejected rows with reasons.
+  5. Administrator reviews and confirms; system loads products and inventory movements stamping each with `OrigenLegacy`.
+  6. Executes mathematical reconciliation (RN-13) and generates final batch report.
+- **Alternate Flows:**
+  - 3a. Invalid rows → segregated and listed with rejection cause; batch concludes as `CON_ERRORES` if administrator accepts partial migration.
+  - 6a. Reconciliation mismatch → batch is fully rolled back (`REVERTIDO`).
 
-### CU-13 Reenviar pendientes
+### UC-13 Resubmit Pending Documents
 
-El planificador recorre `PENDIENTE_ENVIO` con *backoff* exponencial; reenvía **el mismo XML firmado** (no se vuelve a generar)
-y alerta al administrador si un comprobante se acerca al plazo máximo de envío.
+The background scheduler checks all documents in `PENDIENTE_ENVIO` using exponential backoff retry; it resubmits **the exact same signed XML** (never regenerating to preserve signature and sequence integrity) and alerts the administrator if any document approaches the legal deadline for submission.
 
-## 5. Requisitos derivados de opiniones de usuarios
+## 5. Requirements Derived from User Feedback
 
-| Problema reportado frecuentemente | Requisito / decisión |
+| Frequently Reported Problem | Architectural Decision / System Requirement |
 | :--- | :--- |
-| Rechazos por diferencias de redondeo en totales | Motor de cálculo único en el dominio (RN-07/RN-08) con pruebas de propiedades |
-| Correlativos duplicados al usar varias cajas | Bloqueo transaccional por serie; una serie por dispositivo |
-| El sistema se detiene sin internet | Cola de pendientes (CU-13) |
-| Anular es confuso (baja vs. nota de crédito) | Asistente que decide el mecanismo según tipo y estado |
-| Cliente no recibe el comprobante | Envío automático por correo + enlace de consulta |
-| Errores de SUNAT ininteligibles | Traducción de códigos de error a mensajes con la acción sugerida |
+| Rejections due to rounding differences in totals | Unified domain tax computation engine (RN-07/RN-08) with property-based tests |
+| Duplicate sequence numbers when using multiple cash registers | Transactional row-level lock per series; dedicated series assigned per checkout counter |
+| System halts completely when internet drops | Offline queuing (`PENDIENTE_ENVIO`, UC-13) allowing uninterrupted store checkout |
+| Annulment confusion (baja vs. credit note) | Contextual wizard that enforces the appropriate regulatory mechanism based on type and status |
+| Customers complaining about missing invoices | Automatic email delivery with PDF/XML attachments and online query portal link |
+| Incomprehensible SUNAT error codes | Human-readable error translation mapping codes to concrete actionable resolution steps |

@@ -1,16 +1,16 @@
-# 1. Modelo de Dominio y Contratos (DTOs / Schemas)
+# 1. Domain Model and Contracts (DTOs / Schemas)
 
-El modelo se divide en **contextos acotados** (bounded contexts). En el monolito son paquetes; en la visión futura cada uno
-puede convertirse en un microservicio (ver [02_ARQUITECTURA.md](02_ARQUITECTURA.md) §5).
+The model is split into **bounded contexts**. In the monolith they are packages; in the future vision each one can become a
+microservice (see [02_ARQUITECTURA.md](02_ARQUITECTURA.md) §5).
 
-| Contexto | Responsabilidad | Agregados raíz |
+| Context | Responsibility | Aggregate roots |
 | :--- | :--- | :--- |
-| **Facturación** | Emitir, firmar, enviar y anular comprobantes | `ComprobantePago`, `ResumenDiario`, `ComunicacionBaja` |
-| **Catálogos y Maestros** | Emisor, clientes, productos, series, catálogos SUNAT | `Emisor`, `Cliente`, `Producto`, `Serie` |
-| **Inventario** | Movimientos de almacén (kardex) | `MovimientoInventario` |
-| **Migración** | Importar el legado sin perder trazabilidad | `LoteMigracion` |
+| **Billing (Facturación)** | Issue, sign, submit and void documents | `ComprobantePago`, `ResumenDiario`, `ComunicacionBaja` |
+| **Catalogs and Master Data** | Issuer, customers, products, series, SUNAT catalogs | `Emisor`, `Cliente`, `Producto`, `Serie` |
+| **Inventory** | Warehouse movements (inventory ledger / Kardex) | `MovimientoInventario` |
+| **Migration** | Import legacy data without losing traceability | `LoteMigracion` |
 
-## 1. Diagrama de clases del dominio
+## 1. Domain class diagram
 
 ```mermaid
 classDiagram
@@ -120,129 +120,127 @@ classDiagram
     ComprobantePago "*" --> "1" Emisor
     ComprobantePago "*" --> "1" Cliente
     ComprobantePago "1" *-- "1..*" DetalleComprobante
-    ComprobantePago "1" *-- "*" Tributo : resumen
+    ComprobantePago "1" *-- "*" Tributo : summary
     DetalleComprobante "1" *-- "1..*" Tributo
     DetalleComprobante "*" --> "1" Producto
     ComprobantePago "1" --> "0..1" RespuestaSunat
     ComprobantePago <|-- NotaCreditoDebito
-    ComprobantePago "1" --> "*" MovimientoInventario : genera SALIDA
+    ComprobantePago "1" --> "*" MovimientoInventario : generates SALIDA
     MovimientoInventario --> "0..1" OrigenLegacy
     LoteMigracion "1" --> "*" OrigenLegacy
 ```
 
-## 2. Entidades
+## 2. Entities
 
-### 2.1 ComprobantePago (agregado raíz — Factura `01` / Boleta `03`)
+### 2.1 ComprobantePago (Aggregate Root — Factura `01` / Boleta `03`)
 
-| Atributo | Tipo | Regla / Catálogo | UBL 2.1 |
+| Attribute | Type | Rule / Catalog | UBL 2.1 |
 | :--- | :--- | :--- | :--- |
-| `id` | UUID | Interno, no se envía a SUNAT | — |
+| `id` | UUID | Internal, not sent to SUNAT | — |
 | `tipo` | `TipoComprobante` | Cat. 01: `01` Factura, `03` Boleta, `07` NC, `08` ND | `cbc:InvoiceTypeCode` |
-| `serie` | String(4) | RN-03 | parte de `cbc:ID` |
-| `correlativo` | Long 1..99999999 | RN-04, asignado por el sistema | parte de `cbc:ID` |
-| `fechaEmision` / `horaEmision` | Fecha / Hora | RN-05 | `cbc:IssueDate` / `cbc:IssueTime` |
-| `fechaVencimiento` | Fecha opcional | Obligatoria si forma de pago = Crédito | `cbc:DueDate` |
-| `tipoOperacion` | `TipoOperacion` | Cat. 51 (`0101` venta interna) | `cbc:InvoiceTypeCode/@listID` |
+| `serie` | String(4) | RN-03 | part of `cbc:ID` |
+| `correlativo` | Long 1..99999999 | RN-04, assigned by the system | part of `cbc:ID` |
+| `fechaEmision` / `horaEmision` | Date / Time | RN-05 | `cbc:IssueDate` / `cbc:IssueTime` |
+| `fechaVencimiento` | Optional Date | Mandatory if payment method = Crédito | `cbc:DueDate` |
+| `tipoOperacion` | `TipoOperacion` | Cat. 51 (`0101` internal sale) | `cbc:InvoiceTypeCode/@listID` |
 | `moneda` | `Moneda` | Cat. 02 / ISO 4217 (`PEN`, `USD`) | `cbc:DocumentCurrencyCode` |
-| `formaPago` | `FormaPago` | `Contado` / `Credito` + cuotas | `cac:PaymentTerms` |
+| `formaPago` | `FormaPago` | `Contado` / `Credito` + installments | `cac:PaymentTerms` |
 | `emisor` | `Emisor` | RN-01 | `cac:AccountingSupplierParty` |
 | `cliente` | `Cliente` | RN-02, RN-10 | `cac:AccountingCustomerParty` |
-| `detalles` | Lista ≥ 1 | — | `cac:InvoiceLine` |
-| `tributos` | Lista `Tributo` | Suma de líneas por código Cat. 05 | `cac:TaxTotal/cac:TaxSubtotal` |
+| `detalles` | List ≥ 1 | — | `cac:InvoiceLine` |
+| `tributos` | List `Tributo` | Sum of lines by Cat. 05 code | `cac:TaxTotal/cac:TaxSubtotal` |
 | `totales` | `Totales` | RN-08 | `cac:LegalMonetaryTotal` |
-| `leyendas` | Lista | Cat. 52 (`1000` = monto en letras) | `cbc:Note/@languageLocaleID` |
-| `estado` | `EstadoComprobante` | Máquina de estados §5 | — |
-| `hashCpe` | String | Digest de la firma XML | `ds:DigestValue` |
+| `leyendas` | List | Cat. 52 (`1000` = amount in words) | `cbc:Note/@languageLocaleID` |
+| `estado` | `EstadoComprobante` | State machine §5 | — |
+| `hashCpe` | String | XML digital signature digest | `ds:DigestValue` |
 
-### 2.2 DetalleComprobante
+### 2.2 DetalleComprobante (Document Line)
 
-| Atributo | Tipo | Regla | UBL 2.1 |
+| Attribute | Type | Rule | UBL 2.1 |
 | :--- | :--- | :--- | :--- |
-| `linea` | Int ≥ 1 | Consecutivo | `cac:InvoiceLine/cbc:ID` |
+| `linea` | Int ≥ 1 | Consecutive order number | `cac:InvoiceLine/cbc:ID` |
 | `cantidad` | Decimal(12,10) > 0 | — | `cbc:InvoicedQuantity` |
 | `unidad` | `UnidadMedida` | Cat. 03 (UN/ECE Rec. 20: `NIU`, `KGM`, `ZZ`…) | `cbc:InvoicedQuantity/@unitCode` |
 | `descripcion` | String(1..500) | — | `cac:Item/cbc:Description` |
-| `codigoProducto` | String(30) | Código interno | `cac:Item/cac:SellersItemIdentification/cbc:ID` |
-| `valorUnitario` | Decimal(12,10) | Sin tributos | `cac:Price/cbc:PriceAmount` |
-| `precioUnitario` | Decimal(12,10) | Con tributos; Cat. 16 `01` | `cac:PricingReference/cac:AlternativeConditionPrice` |
+| `codigoProducto` | String(30) | Internal product code | `cac:Item/cac:SellersItemIdentification/cbc:ID` |
+| `valorUnitario` | Decimal(12,10) | Without taxes (unit value) | `cac:Price/cbc:PriceAmount` |
+| `precioUnitario` | Decimal(12,10) | With taxes (unit price); Cat. 16 `01` | `cac:PricingReference/cac:AlternativeConditionPrice` |
 | `afectacionIgv` | `TipoAfectacionIgv` | Cat. 07 | `cac:TaxCategory/cbc:TaxExemptionReasonCode` |
-| `valorVenta` | Decimal(12,2) | `cantidad × valorUnitario − descuentos` | `cbc:LineExtensionAmount` |
-| `tributos` | Lista `Tributo` | IGV obligatorio; ISC / ICBPER según producto | `cac:InvoiceLine/cac:TaxTotal` |
+| `valorVenta` | Decimal(12,2) | `cantidad × valorUnitario − discounts` | `cbc:LineExtensionAmount` |
+| `tributos` | List `Tributo` | Mandatory IGV; ISC / ICBPER depending on product | `cac:InvoiceLine/cac:TaxTotal` |
 
-### 2.3 Tributo (value object)
+### 2.3 Tributo (Tax Value Object)
 
-| Atributo | Regla | UBL 2.1 |
+| Attribute | Rule | UBL 2.1 |
 | :--- | :--- | :--- |
 | `codigo` | Cat. 05: `1000` IGV, `2000` ISC, `7152` ICBPER, `9997` Exonerado, `9998` Inafecto, `9995` Exportación, `9996` Gratuito | `cac:TaxScheme/cbc:ID` (+ `cbc:Name`, `cbc:TaxTypeCode`) |
-| `base` | Base imponible de la línea | `cbc:TaxableAmount` |
-| `tasa` | IGV 18 %; ISC según sistema; ICBPER monto fijo por bolsa | `cbc:Percent` / `cbc:PerUnitAmount` |
-| `monto` | Calculado (RN-07) | `cbc:TaxAmount` |
-| `sistemaIsc` | **Cat. 08** — solo si `codigo = 2000`: `01` Sistema al valor, `02` Aplicación del monto fijo, `03` Sistema de precios de venta al público | `cac:TaxCategory/cbc:TierRange` |
+| `base` | Line taxable base amount | `cbc:TaxableAmount` |
+| `tasa` | IGV 18 %; ISC according to system; ICBPER fixed amount per bag | `cbc:Percent` / `cbc:PerUnitAmount` |
+| `monto` | Calculated tax amount (RN-07) | `cbc:TaxAmount` |
+| `sistemaIsc` | **Cat. 08** — only if `codigo = 2000`: `01` Sistema al valor, `02` Aplicación del monto fijo, `03` Sistema de precios de venta al público | `cac:TaxCategory/cbc:TierRange` |
 
 ### 2.4 Emisor, Cliente, Producto, Serie
 
-- **Emisor**: `ruc` (RN-01), `razonSocial`, `domicilioFiscal` con ubigeo (INEI), `codigoEstablecimiento` (`0000` = domicilio fiscal), certificado digital (`.pfx`), credenciales SOL secundarias u OSE.
+- **Emisor**: `ruc` (RN-01), `razonSocial`, `domicilioFiscal` with ubigeo (INEI), `codigoEstablecimiento` (`0000` = fiscal domicile), digital certificate (`.pfx`), secondary SOL credentials or OSE.
 - **Cliente**: `tipoDoc` (Cat. 06: `6` RUC, `1` DNI, `4` Carné de extranjería, `7` Pasaporte, `0` No domiciliado, `-` Varios), `numeroDoc` (RN-02), `razonSocial`, `direccion`, `email`.
-- **Producto**: `codigo` interno, `descripcion`, `unidad` (Cat. 03), `codigoSunat` (Cat. 25, UNSPSC), `afectacionPorDefecto` (Cat. 07), configuración ISC (Cat. 08 + tasa), `afectoIcbper` (bolsas plásticas).
-- **Serie**: pertenece a un emisor y tipo de comprobante; controla el correlativo con bloqueo transaccional (RN-04).
+- **Producto**: internal `codigo`, `descripcion`, `unidad` (Cat. 03), `codigoSunat` (Cat. 25, UNSPSC), `afectacionPorDefecto` (Cat. 07), ISC configuration (Cat. 08 + rate), `afectoIcbper` (plastic bags).
+- **Serie**: belongs to an issuer and document type; manages sequential numbering with transactional locking (RN-04).
 
-### 2.5 MovimientoInventario y migración
+### 2.5 MovimientoInventario and Migration
 
-- **MovimientoInventario** (kardex, N-02): `fecha`, `tipo` (`INGRESO`/`SALIDA`), `codigoProducto`, `cantidad`, `documentoReferencia`, `origen` (`SISTEMA` u `OrigenLegacy`). Toda venta aceptada genera una `SALIDA`.
-- **LoteMigracion**: una ejecución de importación del legado. Estados: `CARGADO → VALIDADO → MIGRADO | CON_ERRORES | REVERTIDO`.
-- **OrigenLegacy**: sello de trazabilidad en cada registro migrado (`loteId`, `filaOrigen`, `nroDocumentoLegacy`, `hashFila` SHA-256 de la fila original).
+- **MovimientoInventario** (Kardex, N-02): `fecha`, `tipo` (`INGRESO`/`SALIDA`), `codigoProducto`, `cantidad`, `documentoReferencia`, `origen` (`SISTEMA` or `OrigenLegacy`). Every accepted sale generates a `SALIDA`.
+- **LoteMigracion**: a legacy import execution batch. States: `CARGADO → VALIDADO → MIGRADO | CON_ERRORES | REVERTIDO`.
+- **OrigenLegacy**: traceability stamp on every migrated record (`loteId`, `filaOrigen`, `nroDocumentoLegacy`, `hashFila` SHA-256 of the original row).
 
-## 3. Catálogos SUNAT como Value Objects
+## 3. SUNAT Catalogs as Value Objects
 
-Cada catálogo es un tipo cerrado; un valor fuera de catálogo no puede construirse (falla en el constructor, no en la base de datos).
+Each catalog is a closed type; a value outside the catalog cannot be instantiated (it fails at constructor validation, not at the database level).
 
-| Value Object | Catálogo | Valores mínimos soportados en fase 1 |
+| Value Object | Catalog | Minimum values supported in Phase 1 |
 | :--- | :--- | :--- |
-| `TipoComprobante` | 01 | `01`, `03`, `07`, `08` |
+| `TipoComprobante` | 01 | `01` Factura, `03` Boleta, `07` Nota de Crédito, `08` Nota de Débito |
 | `Moneda` | 02 | `PEN`, `USD` |
 | `UnidadMedida` | 03 | `NIU`, `KGM`, `LTR`, `BX`, `ZZ`, … |
-| `CodigoTributo` | 05 | `1000`, `2000`, `7152`, `9995`–`9998` |
-| `TipoDocIdentidad` | 06 | `0`, `1`, `4`, `6`, `7`, `-` |
-| `TipoAfectacionIgv` | 07 | `10` Gravado onerosa, `20` Exonerado onerosa, `30` Inafecto onerosa, `40` Exportación, `11`–`17`, `21`, `31`–`36` gratuitas |
-| `SistemaIsc` | **08** | `01`, `02`, `03` |
+| `CodigoTributo` | 05 | `1000` (IGV), `2000` (ISC), `7152` (ICBPER), `9995`–`9998` |
+| `TipoDocIdentidad` | 06 | `0`, `1` (DNI), `4`, `6` (RUC), `7`, `-` |
+| `TipoAfectacionIgv` | 07 | `10` Gravado - Operación Onerosa, `20` Exonerado, `30` Inafecto, `40` Exportación, `11`–`17`, `21`, `31`–`36` gratuitous |
+| `SistemaIsc` | **08** | `01` (Al valor), `02` (Monto fijo), `03` (PVP) |
 | `MotivoNotaCredito` / `MotivoNotaDebito` | 09 / 10 | `01` Anulación de la operación, `07` Devolución por ítem, … |
 | `TipoPrecio` | 16 | `01` Precio unitario, `02` Valor referencial (gratuitas) |
 | `TipoOperacion` | 51 | `0101` Venta interna |
 | `Leyenda` | 52 | `1000` Monto en letras, `1002` Transferencia gratuita |
 
-### 3.1 Por qué el Catálogo 08 es clave
+### 3.1 Why Catalog 08 is critical
 
-El ISC (Impuesto Selectivo al Consumo) grava productos que un mayorista de abarrotes sí vende: **cervezas, licores, gaseosas y
-bebidas azucaradas, cigarrillos**. El Catálogo 08 define **cómo** se calcula ese ISC, y el resultado cambia la base del IGV:
+ISC (Impuesto Selectivo al Consumo) levies products that a wholesale grocery business routinely sells: **beer, liquor, sodas and sweetened drinks, cigarettes**. Catalog 08 defines **how** that ISC is computed, and the result changes the base amount for IGV:
 
-| Código | Sistema | Fórmula de la línea |
+| Code | System | Line formula |
 | :--- | :--- | :--- |
 | `01` | Sistema al valor | `ISC = valorVenta × tasa%` |
 | `02` | Aplicación del monto fijo | `ISC = cantidad × montoFijo` |
 | `03` | Sistema de precios de venta al público | `ISC = (PVP sugerido × cantidad / (1 + IGV)) × tasa%` |
 
-Como el ISC forma parte de la base imponible del IGV (`baseIGV = valorVenta + ISC`), un error en el Catálogo 08 se propaga a IGV,
-totales y hash; SUNAT/OSE rechaza el comprobante por inconsistencia de montos.
+Because ISC forms part of the taxable base for IGV (`baseIGV = valorVenta + ISC`), an error in Catalog 08 propagates directly to IGV, totals, and XML hash; SUNAT/OSE will reject the document for amount inconsistency.
 
-## 4. Reglas de negocio y validación (RN)
+## 4. Business and Validation Rules (RN)
 
-| ID | Regla | Origen | Error devuelto |
+| ID | Rule | Source | Returned error code |
 | :--- | :--- | :--- | :--- |
-| RN-01 | RUC del emisor: 11 dígitos, prefijo `10`, `15`, `16`, `17` o `20`, dígito verificador módulo 11 (pesos 5,4,3,2,7,6,5,4,3,2), estado ACTIVO y condición HABIDO | N-01 | `RUC_EMISOR_INVALIDO` |
-| RN-02 | Documento del cliente según Cat. 06: RUC = RN-01; DNI = 8 dígitos | N-01, N-04 | `DOC_CLIENTE_INVALIDO` |
-| RN-03 | Serie: Factura `F` + 3 alfanuméricos; Boleta `B` + 3 alfanuméricos; NC/ND usan la serie del documento afectado. `cbc:ID` con formato UBL 2.1 Perú `an..13` y patrón `[FB][A-Z0-9]{3}-[0-9]{1,8}` (p. ej. `F001-1`) | N-05 | `SERIE_INVALIDA` |
-| RN-04 | Correlativo único, consecutivo por serie, sin saltos; lo asigna el sistema, **nunca** se toma del legado | N-01 | `CORRELATIVO_DUPLICADO` |
-| RN-05 | Fecha de emisión no futura y dentro del plazo máximo de envío vigente (parámetro configurable) | N-01 | `FECHA_FUERA_DE_PLAZO` |
-| RN-06 | Factura exige cliente con RUC (salvo exportación); Boleta exige DNI/doc si el importe supera el umbral vigente (S/ 700) | N-01 | `CLIENTE_REQUERIDO` |
-| RN-07 | Cálculo por línea: `ISC` según Cat. 08 → `baseIGV = valorVenta + ISC` → `IGV = baseIGV × 18 %` (solo si Cat. 07 = gravado) → `ICBPER = cantidad × tasa vigente` | N-04 | `MONTOS_INCONSISTENTES` |
-| RN-08 | Totales: `LineExtensionAmount = Σ valorVenta − descuentos globales que afectan la base (Cat. 53 '02')`; `TaxInclusiveAmount = LineExtension + Σ tributos`; `PayableAmount = TaxInclusive − descuentos que no afectan la base ('03') + cargos − anticipos`; redondeo a 2 decimales con tolerancia ±1 | N-05 | `TOTALES_INCONSISTENTES` |
-| RN-09 | Moneda distinta de PEN requiere tipo de cambio | N-04 | `TIPO_CAMBIO_REQUERIDO` |
-| RN-10 | Forma de pago `Credito` exige fecha de vencimiento y cuotas cuya suma = monto neto pendiente | N-05 | `CUOTAS_INVALIDAS` |
-| RN-11 | El XML debe validar contra `UBL-Invoice-2.1.xsd` y cumplir la personalización UBL 2.1 Perú (`CustomizationID` 2.0, atributos `PE:SUNAT`, elementos obligatorios de la matriz 04) antes de firmarse | T-01, N-05 | `XML_NO_VALIDA_XSD` |
-| RN-12 | Un comprobante `ACEPTADO` es inmutable; solo se corrige con NC/ND o se da de baja | N-01 | `COMPROBANTE_INMUTABLE` |
-| RN-13 | Cada registro migrado conserva `OrigenLegacy`; Σ cantidades legadas = Σ cantidades migradas por producto | Enunciado §2 | `RECONCILIACION_FALLIDA` |
+| RN-01 | Issuer RUC: 11 digits, prefix `10`, `15`, `16`, `17` or `20`, modulo 11 check digit (weights 5,4,3,2,7,6,5,4,3,2), ACTIVO state and HABIDO condition | N-01 | `RUC_EMISOR_INVALIDO` |
+| RN-02 | Customer document according to Cat. 06: RUC = RN-01; DNI = 8 digits | N-01, N-04 | `DOC_CLIENTE_INVALIDO` |
+| RN-03 | Series: Factura `F` + 3 alphanumerics; Boleta `B` + 3 alphanumerics; NC/ND use the affected document series. `cbc:ID` in UBL 2.1 Peru format `an..13` and pattern `[FB][A-Z0-9]{3}-[0-9]{1,8}` (e.g. `F001-1`) | N-05 | `SERIE_INVALIDA` |
+| RN-04 | Unique consecutive sequence number per series without gaps; assigned by the system, **never** taken from the legacy system | N-01 | `CORRELATIVO_DUPLICADO` |
+| RN-05 | Issue date must not be in the future and must be within the maximum submission window allowed by regulation | N-01 | `FECHA_FUERA_DE_PLAZO` |
+| RN-06 | Factura requires a customer with RUC (except export); Boleta requires DNI/document if the total exceeds the statutory threshold (S/ 700) | N-01 | `CLIENTE_REQUERIDO` |
+| RN-07 | Calculation per line: `ISC` according to Cat. 08 → `baseIGV = valorVenta + ISC` → `IGV = baseIGV × 18 %` (only if Cat. 07 = gravado) → `ICBPER = cantidad × current statutory rate` | N-04 | `MONTOS_INCONSISTENTES` |
+| RN-08 | Totales: `LineExtensionAmount = Σ valorVenta − global discounts affecting base (Cat. 53 '02')`; `TaxInclusiveAmount = LineExtension + Σ taxes`; `PayableAmount = TaxInclusive − discounts not affecting base ('03') + charges − prepayments`; rounding to 2 decimals with ±1 cent tolerance | N-05 | `TOTALES_INCONSISTENTES` |
+| RN-09 | Currency other than PEN requires exchange rate | N-04 | `TIPO_CAMBIO_REQUERIDO` |
+| RN-10 | Payment terms `Credito` require due date and installments whose sum equals net pending payable amount | N-05 | `CUOTAS_INVALIDAS` |
+| RN-11 | The XML must validate against `UBL-Invoice-2.1.xsd` and comply with the UBL 2.1 Peru customization (`CustomizationID` 2.0, `PE:SUNAT` attributes, mandatory elements from matrix 04) before being digitally signed | T-01, N-05 | `XML_NO_VALIDA_XSD` |
+| RN-12 | An `ACEPTADO` document is immutable; it can only be adjusted via NC/ND or voided via communication of baja | N-01 | `COMPROBANTE_INMUTABLE` |
+| RN-13 | Every migrated record preserves `OrigenLegacy`; Σ legacy quantities = Σ migrated quantities per product | Assignment §2 | `RECONCILIACION_FALLIDA` |
 
-## 5. Máquina de estados del comprobante
+## 5. Document State Machine
 
 ```mermaid
 stateDiagram-v2
@@ -250,50 +248,51 @@ stateDiagram-v2
     BORRADOR --> VALIDADO: RN-01..RN-11 OK
     VALIDADO --> FIRMADO: XML UBL + XML-DSig
     FIRMADO --> ENVIADO: sendBill / OSE
-    FIRMADO --> PENDIENTE_ENVIO: sin conexión
-    PENDIENTE_ENVIO --> ENVIADO: reintento automático
-    ENVIADO --> ACEPTADO: CDR código 0
-    ENVIADO --> ACEPTADO_CON_OBS: CDR código >= 4000
+    FIRMADO --> PENDIENTE_ENVIO: without connection
+    PENDIENTE_ENVIO --> ENVIADO: automatic retry
+    ENVIADO --> ACEPTADO: CDR code 0
+    ENVIADO --> ACEPTADO_CON_OBS: CDR code >= 4000
     ENVIADO --> RECHAZADO: CDR 2000–3999
-    ENVIADO --> PENDIENTE_ENVIO: excepción 0100–1999
+    ENVIADO --> PENDIENTE_ENVIO: exception 0100–1999
     ACEPTADO --> ANULADO: Comunicación de baja / Resumen diario
     ACEPTADO_CON_OBS --> ANULADO
     RECHAZADO --> [*]
 ```
 
-Un `RECHAZADO` no se reenvía: su correlativo queda consumido y se emite uno nuevo.
+A `RECHAZADO` document is never resent: its sequence number is permanently consumed, and a new document must be issued.
 
-## 6. Estrategia de migración de datos legados
+## 6. Legacy Data Migration Strategy
 
-**Decisión clave:** los registros del software básico son **movimientos de almacén**, no comprobantes electrónicos. No se
-puede (ni se debe) generar facturas electrónicas retroactivas con fechas antiguas ni reutilizar el `nro_documento` informal como
-correlativo SUNAT (rompería RN-04 y RN-05). Por eso el legado se migra al **kardex** y al **maestro de productos**.
+**Key architectural decision:** records from the basic software are **warehouse movements**, not electronic invoices. One
+cannot (and must not) emit retroactive electronic invoices with historical dates or reuse the informal `nro_documento` as a
+SUNAT sequence number (which would violate RN-04 and RN-05). Therefore, legacy records are migrated into the **Kardex** and the
+**Product Master**.
 
-| Campo legado | Destino | Regla de transformación |
+| Legacy field | Destination | Transformation rule |
 | :--- | :--- | :--- |
-| `fecha` | `MovimientoInventario.fecha` | Parseo de formatos detectados (`dd/MM/yyyy`, `yyyy-MM-dd`…) a ISO-8601; fecha inválida → fila rechazada con motivo |
-| `ingreso` | `MovimientoInventario(tipo=INGRESO, cantidad)` | Si `ingreso > 0`; numérico ≥ 0 |
-| `salida` | `MovimientoInventario(tipo=SALIDA, cantidad)` | Si `salida > 0`; una fila con ingreso y salida genera 2 movimientos |
-| `producto` | `Producto` (código, descripción, unidad) | Normalización de texto (mayúsculas, espacios); deduplicación por similitud; código interno nuevo; unidad Cat. 03 inferida o `NIU` por defecto, marcada para revisión |
-| `nro_documento` | `MovimientoInventario.documentoReferencia` y `OrigenLegacy.nroDocumentoLegacy` | Se conserva **tal cual** como referencia histórica, sin usarse como serie/correlativo |
-| (fila completa) | `OrigenLegacy` | `hashFila` SHA-256 + `filaOrigen` + `loteId` |
+| `fecha` | `MovimientoInventario.fecha` | Parsing of detected formats (`dd/MM/yyyy`, `yyyy-MM-dd`…) into ISO-8601; invalid date → rejected row with reason |
+| `ingreso` | `MovimientoInventario(tipo=INGRESO, cantidad)` | If `ingreso > 0`; numeric ≥ 0 |
+| `salida` | `MovimientoInventario(tipo=SALIDA, cantidad)` | If `salida > 0`; a row with both inbound and outbound generates 2 movements |
+| `producto` | `Producto` (code, description, unit) | Text normalization (uppercase, spaces); deduplication by similarity; new internal code; inferred Cat. 03 unit or `NIU` default, flagged for review |
+| `nro_documento` | `MovimientoInventario.documentoReferencia` & `OrigenLegacy.nroDocumentoLegacy` | Preserved **as is** as historical reference, never used as series/sequence number |
+| (full row) | `OrigenLegacy` | `hashFila` SHA-256 + `filaOrigen` + `loteId` |
 
-Proceso: **Extraer → Staging → Validar → Transformar → Cargar → Reconciliar** (idempotente: re-ejecutar un lote con el mismo
-`hashArchivo` no duplica datos). Ver CU-12 y `/migraciones` en la API.
+Process: **Extract → Staging → Validate → Transform → Load → Reconcile** (idempotent: re-running a batch with the same
+`hashArchivo` will not duplicate data). See UC-12 and `/migraciones` in the API contract.
 
-## 7. Contratos (DTOs / Schemas)
+## 7. Contracts (DTOs / Schemas)
 
-Los DTOs son la frontera entre la Vista/Controlador y el dominio; **nunca** se exponen entidades. La definición formal (JSON Schema
-dentro de OpenAPI 3.0.3) vive en [`specs/03_CONTRATOS_API.yaml`](../specs/03_CONTRATOS_API.yaml) → `components/schemas`.
+DTOs form the boundary between the View/Controller and the domain; entities are **never** exposed. The formal definition (JSON Schema
+within OpenAPI 3.0.3) is located in [`specs/03_CONTRATOS_API.yaml`](../specs/03_CONTRATOS_API.yaml) → `components/schemas`.
 
-| DTO | Dirección | Mapea a | Notas |
+| DTO | Direction | Maps to | Notes |
 | :--- | :--- | :--- | :--- |
-| `EmitirComprobanteRequest` | entrada | `ComprobantePago` | No incluye correlativo ni totales: los calcula el dominio |
-| `ItemRequest` | entrada | `DetalleComprobante` | Acepta `valorUnitario` **o** `precioUnitario` (excluyentes) |
-| `ClienteDto` | entrada/salida | `Cliente` | |
-| `ComprobanteResponse` | salida | `ComprobantePago` + `RespuestaSunat` | Incluye totales, hash, estado y enlaces XML/CDR/PDF |
-| `TotalesDto` / `TributoDto` | salida | `Totales` / `Tributo` | |
-| `NotaRequest` | entrada | `NotaCreditoDebito` | Requiere documento de referencia y motivo Cat. 09/10 |
-| `BajaRequest` | entrada | `ComunicacionBaja` | |
-| `LoteMigracionResponse` | salida | `LoteMigracion` | Conteos y reporte de reconciliación |
-| `ErrorResponse` | salida | — | `codigo` (RN-xx o código SUNAT), `mensaje`, `campo` |
+| `EmitirComprobanteRequest` | input | `ComprobantePago` | Does not include sequence number or totals: calculated by domain |
+| `ItemRequest` | input | `DetalleComprobante` | Accepts `valorUnitario` **or** `precioUnitario` (mutually exclusive) |
+| `ClienteDto` | input/output | `Cliente` | |
+| `ComprobanteResponse` | output | `ComprobantePago` + `RespuestaSunat` | Includes totals, hash, status, and XML/CDR/PDF links |
+| `TotalesDto` / `TributoDto` | output | `Totales` / `Tributo` | |
+| `NotaRequest` | input | `NotaCreditoDebito` | Requires reference document and Cat. 09/10 reason |
+| `BajaRequest` | input | `ComunicacionBaja` | |
+| `LoteMigracionResponse` | output | `LoteMigracion` | Counts and reconciliation report |
+| `ErrorResponse` | output | — | `codigo` (RN-xx or SUNAT error code), `mensaje`, `campo` |
