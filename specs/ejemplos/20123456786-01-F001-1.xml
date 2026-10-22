@@ -42,7 +42,7 @@
   <cac:Signature>
     <cbc:ID>SignatureABC</cbc:ID>
     <cac:SignatoryParty>
-      <cac:PartyIdentification><cbc:ID>20123456789</cbc:ID></cac:PartyIdentification>
+      <cac:PartyIdentification><cbc:ID>20123456786</cbc:ID></cac:PartyIdentification>
       <cac:PartyName><cbc:Name><![CDATA[ABC SOFTWARE CORP S.A.C.]]></cbc:Name></cac:PartyName>
     </cac:SignatoryParty>
     <cac:DigitalSignatureAttachment>
@@ -55,7 +55,7 @@
     <cac:Party>
       <cac:PartyIdentification>
         <cbc:ID schemeID="6" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT"
-                schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20123456789</cbc:ID>
+                schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20123456786</cbc:ID>
       </cac:PartyIdentification>
       <cac:PartyName><cbc:Name><![CDATA[ABC ABARROTES]]></cbc:Name></cac:PartyName>
       <cac:PartyLegalEntity>
@@ -75,7 +75,7 @@
     <cac:Party>
       <cac:PartyIdentification>
         <cbc:ID schemeID="6" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT"
-                schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20600000001</cbc:ID>
+                schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20600000005</cbc:ID>
       </cac:PartyIdentification>
       <cac:PartyLegalEntity>
         <cbc:RegistrationName><![CDATA[DISTRIBUIDORA AMAZONAS E.I.R.L.]]></cbc:RegistrationName>

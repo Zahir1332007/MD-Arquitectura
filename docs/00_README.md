@@ -37,7 +37,8 @@ reglas, contratos de datos, validaciones e interfaces, tomando como fuente el es
 | 3 | Especificación de Endpoints / Servicios (Contratos API) | [../specs/03_CONTRATOS_API.yaml](../specs/03_CONTRATOS_API.yaml) (OpenAPI 3.0.3) |
 | 4 | Matriz de Trazabilidad Normativa SUNAT ↔ UBL | [04_MATRIZ_TRAZABILIDAD.md](04_MATRIZ_TRAZABILIDAD.md) |
 | — | Casos de uso (sección 3 del enunciado) | [05_CASOS_DE_USO.md](05_CASOS_DE_USO.md) |
-| — | XML de ejemplo UBL 2.1 Perú (factura) | [../specs/ejemplos/20123456789-01-F001-1.xml](../specs/ejemplos/20123456789-01-F001-1.xml) |
+| — | XML de ejemplo UBL 2.1 Perú (factura) | [../specs/ejemplos/20123456786-01-F001-1.xml](../specs/ejemplos/20123456786-01-F001-1.xml) |
+| — | **Specs formales** (reglas Gherkin, JSON Schemas, catálogos, puertos, mapeo del legado, reglas de arquitectura) | [../specs/README.md](../specs/README.md) |
 
 Convenciones de identificadores usados en todos los documentos:
 

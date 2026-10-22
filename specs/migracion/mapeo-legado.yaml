@@ -1,0 +1,69 @@
+# Spec-First: contrato de migración del software básico de almacén hacia el nuevo dominio.
+# Trazabilidad: docs/01_MODELO_DE_DOMINIO.md §6 · docs/04_MATRIZ_TRAZABILIDAD.md §4.6 · specs/reglas/RN-13_migracion_legado.feature
+version: 1.0.0
+origen:
+  sistema: Software básico de almacén (legado)
+  formato: CSV (UTF-8 o Windows-1252) o lectura directa de su base de datos
+  esquema: specs/schemas/registro-legado.schema.json
+  columnas: [fecha, ingreso, salida, producto, nro_documento]
+
+principios:
+  - El legado alimenta el kardex (Registro de Inventario Permanente, RS 234-2006) y el maestro de productos.
+  - No se generan comprobantes electrónicos (ComprobantePago) desde el legado.
+  - nro_documento nunca se usa como serie/correlativo SUNAT (RN-04).
+  - Todo registro migrado conserva OrigenLegacy (loteId, filaOrigen, nroDocumentoLegacy, hashFila).
+  - El proceso es idempotente por hashArchivo (SHA-256 del archivo completo).
+
+etapas:
+  - { orden: 1, nombre: Extraer, puerto: LegacySourcePort, salida: filas crudas en staging }
+  - { orden: 2, nombre: Validar, salida: filas válidas + filasRechazadas con motivo }
+  - { orden: 3, nombre: Transformar, salida: Producto + MovimientoInventario + OrigenLegacy }
+  - { orden: 4, nombre: Cargar, transaccion: una por lote (todo o nada) }
+  - { orden: 5, nombre: Reconciliar, regla: RN-13, si_falla: REVERTIDO }
+
+mapeo:
+  fecha:
+    destino: MovimientoInventario.fecha
+    tipo_destino: date (ISO-8601)
+    transformacion: parsear con formatos [dd/MM/yyyy, d/M/yyyy, yyyy-MM-dd, dd-MM-yyyy]; el primero configurable por lote
+    rechazo: [fecha imposible (31/02), fecha futura, vacía]
+  ingreso:
+    destino: MovimientoInventario(tipo=INGRESO).cantidad
+    condicion: ingreso > 0
+    transformacion: numérico decimal; separador decimal "," o "."
+    rechazo: [negativo, no numérico]
+  salida:
+    destino: MovimientoInventario(tipo=SALIDA).cantidad
+    condicion: salida > 0
+    transformacion: igual que ingreso
+    rechazo: [negativo, no numérico]
+    nota: Una fila con ingreso > 0 y salida > 0 genera dos movimientos.
+  producto:
+    destino: Producto (codigo, descripcion, unidadMedida)
+    transformacion:
+      - normalizar texto (mayúsculas, sin tildes, espacios simples, "50 kg" == "50kg")
+      - agrupar descripciones equivalentes en un solo producto
+      - asignar codigo interno secuencial "LEG-00001"
+      - unidadMedida inferida por palabras clave (kg → KGM, litro/L → LTR, caja/cja → BX) o NIU por defecto
+      - tipoAfectacionIgv por defecto "10" y marca revisionPendiente=true
+    rechazo: [vacío]
+    trazabilidad: Producto.origenLegacy guarda la primera fila donde apareció
+  nro_documento:
+    destino: [MovimientoInventario.documentoReferencia, OrigenLegacy.nroDocumentoLegacy]
+    transformacion: se conserva tal cual (sin limpiar), como referencia histórica
+    prohibido: [ComprobantePago.serie, ComprobantePago.correlativo, Cliente.numeroDoc]
+
+trazabilidad:
+  OrigenLegacy:
+    loteId: UUID del lote
+    filaOrigen: número de fila en el archivo (1 = primera fila de datos)
+    nroDocumentoLegacy: valor original de nro_documento
+    hashFila: SHA-256 de la fila original sin modificar
+
+reconciliacion:
+  regla: RN-13
+  controles:
+    - Σ ingreso legado (filas aceptadas) == Σ MovimientoInventario INGRESO del lote, por producto
+    - Σ salida legado (filas aceptadas) == Σ MovimientoInventario SALIDA del lote, por producto
+    - filasLeidas == filasAceptadas + filasRechazadas
+  estados_lote: [CARGADO, VALIDADO, MIGRADO, CON_ERRORES, REVERTIDO]

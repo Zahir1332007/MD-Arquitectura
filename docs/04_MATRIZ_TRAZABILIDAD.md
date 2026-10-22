@@ -5,7 +5,7 @@ UBL 2.1, estructura 2.0"), no el UBL genérico de OASIS. Cada fila responde: *¿
 en el XML?*, *¿con qué formato?*, *¿qué atributo del dominio lo produce?*, *¿de qué dato legado proviene?* y *¿qué regla lo valida?*.
 
 Normas: N-01 RS 097-2012, N-02 RS 234-2006, N-04 Anexo 8 Catálogos, N-05 Guía XML UBL 2.1 Perú (ver [00_README.md](00_README.md)).
-Ejemplo completo: [`specs/ejemplos/20123456789-01-F001-1.xml`](../specs/ejemplos/20123456789-01-F001-1.xml).
+Ejemplo completo: [`specs/ejemplos/20123456786-01-F001-1.xml`](../specs/ejemplos/20123456786-01-F001-1.xml).
 
 ## 4.0 Diferencias entre UBL 2.1 OASIS y UBL 2.1 Perú (SUNAT)
 
@@ -17,7 +17,7 @@ Ejemplo completo: [`specs/ejemplos/20123456789-01-F001-1.xml`](../specs/ejemplos
 | Tributos | `TaxScheme` genérico | Cat. 05 (`1000` IGV, `2000` ISC, `7152` ICBPER…), afectación IGV Cat. 07 y sistema ISC **Cat. 08** en `cbc:TierRange` |
 | Extensiones | `ext:UBLExtensions` libre | Solo se usa para la **firma XML-DSig**; las extensiones `sac:` de UBL 2.0 ya no se usan |
 | Documentos | Un esquema por tipo | Factura `01` y Boleta `03` → `Invoice`; NC `07` → `CreditNote`; ND `08` → `DebitNote`; Resumen diario y Baja → esquemas propios SUNAT (`SummaryDocuments`, `VoidedDocuments`) |
-| Nombre del archivo | No definido | `{RUC}-{TipoDoc}-{Serie}-{Correlativo}.xml` comprimido en `.zip` (p. ej. `20123456789-01-F001-1.zip`) |
+| Nombre del archivo | No definido | `{RUC}-{TipoDoc}-{Serie}-{Correlativo}.xml` comprimido en `.zip` (p. ej. `20123456786-01-F001-1.zip`) |
 
 ### Atributos de catálogo usados en todo el XML
 

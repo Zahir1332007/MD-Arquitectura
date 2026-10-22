@@ -1,0 +1,131 @@
+{
+  "$comment": "Spec-First: catálogos SUNAT (Anexo 8) soportados en la fase 1, con su codificación UBL 2.1 Perú. Fuente única para los value objects del dominio y los enum de specs/03_CONTRATOS_API.yaml. Verificar contra la versión vigente del Anexo 8 antes de implementar.",
+  "version": "1.0.0",
+  "catalogos": {
+    "01": {
+      "nombre": "Tipo de documento",
+      "ubl": { "elemento": "cbc:InvoiceTypeCode", "listAgencyName": "PE:SUNAT", "listName": "Tipo de Documento", "listURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01" },
+      "matriz": "T07",
+      "valores": { "01": "Factura", "03": "Boleta de venta", "07": "Nota de crédito", "08": "Nota de débito" }
+    },
+    "02": {
+      "nombre": "Moneda (ISO 4217)",
+      "ubl": { "elemento": "cbc:DocumentCurrencyCode / @currencyID", "listID": "ISO 4217 Alpha", "listName": "Currency", "listAgencyName": "United Nations Economic Commission for Europe" },
+      "matriz": "T10",
+      "valores": { "PEN": "Sol", "USD": "Dólar estadounidense" }
+    },
+    "03": {
+      "nombre": "Unidad de medida (UN/ECE Rec. 20)",
+      "ubl": { "elemento": "cbc:InvoicedQuantity/@unitCode", "unitCodeListID": "UN/ECE rec 20", "unitCodeListAgencyName": "United Nations Economic Commission for Europe" },
+      "matriz": "L03",
+      "valores": { "NIU": "Unidad (bienes)", "ZZ": "Unidad (servicios)", "KGM": "Kilogramo", "LTR": "Litro", "BX": "Caja", "PK": "Paquete", "BG": "Bolsa", "DZN": "Docena", "GLL": "Galón" }
+    },
+    "05": {
+      "nombre": "Código de tributo",
+      "ubl": { "elemento": "cac:TaxScheme/cbc:ID", "schemeName": "Codigo de tributos", "schemeAgencyName": "PE:SUNAT", "schemeURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05" },
+      "matriz": "X01",
+      "valores": {
+        "1000": { "descripcion": "IGV Impuesto General a las Ventas", "name": "IGV", "taxTypeCode": "VAT" },
+        "1016": { "descripcion": "Impuesto a la Venta de Arroz Pilado", "name": "IVAP", "taxTypeCode": "VAT" },
+        "2000": { "descripcion": "ISC Impuesto Selectivo al Consumo", "name": "ISC", "taxTypeCode": "EXC" },
+        "7152": { "descripcion": "Impuesto al Consumo de las Bolsas de Plástico", "name": "ICBPER", "taxTypeCode": "OTH" },
+        "9995": { "descripcion": "Exportación", "name": "EXP", "taxTypeCode": "FRE" },
+        "9996": { "descripcion": "Gratuito", "name": "GRA", "taxTypeCode": "FRE" },
+        "9997": { "descripcion": "Exonerado", "name": "EXO", "taxTypeCode": "VAT" },
+        "9998": { "descripcion": "Inafecto", "name": "INA", "taxTypeCode": "FRE" },
+        "9999": { "descripcion": "Otros tributos", "name": "OTROS", "taxTypeCode": "OTH" }
+      }
+    },
+    "06": {
+      "nombre": "Tipo de documento de identidad",
+      "ubl": { "elemento": "cac:PartyIdentification/cbc:ID/@schemeID", "schemeName": "Documento de Identidad", "schemeAgencyName": "PE:SUNAT", "schemeURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06" },
+      "matriz": ["E01", "R01"],
+      "valores": {
+        "0": { "descripcion": "Doc. tributario no domiciliado sin RUC" },
+        "1": { "descripcion": "DNI", "patron": "^\\d{8}$" },
+        "4": { "descripcion": "Carné de extranjería", "patron": "^[A-Z0-9]{1,12}$" },
+        "6": { "descripcion": "RUC", "patron": "^(10|15|16|17|20)\\d{9}$", "digitoVerificador": "módulo 11, pesos 5,4,3,2,7,6,5,4,3,2; dv = 11 − (suma mod 11); 10→0, 11→1" },
+        "7": { "descripcion": "Pasaporte", "patron": "^[A-Z0-9]{1,12}$" },
+        "A": { "descripcion": "Cédula diplomática de identidad" },
+        "-": { "descripcion": "Varios (venta menor sin identificar; solo boleta bajo el umbral)" }
+      }
+    },
+    "07": {
+      "nombre": "Tipo de afectación del IGV",
+      "ubl": { "elemento": "cbc:TaxExemptionReasonCode", "listAgencyName": "PE:SUNAT", "listName": "Afectacion del IGV", "listURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07" },
+      "matriz": "X02",
+      "valores": {
+        "10": { "descripcion": "Gravado - Operación onerosa", "tributo": "1000", "gratuita": false },
+        "11": { "descripcion": "Gravado - Retiro por premio", "tributo": "1000", "gratuita": true },
+        "12": { "descripcion": "Gravado - Retiro por donación", "tributo": "1000", "gratuita": true },
+        "13": { "descripcion": "Gravado - Retiro", "tributo": "1000", "gratuita": true },
+        "14": { "descripcion": "Gravado - Retiro por publicidad", "tributo": "1000", "gratuita": true },
+        "15": { "descripcion": "Gravado - Bonificaciones", "tributo": "1000", "gratuita": true },
+        "16": { "descripcion": "Gravado - Retiro por entrega a trabajadores", "tributo": "1000", "gratuita": true },
+        "17": { "descripcion": "Gravado - IVAP", "tributo": "1016", "gratuita": false },
+        "20": { "descripcion": "Exonerado - Operación onerosa", "tributo": "9997", "gratuita": false },
+        "21": { "descripcion": "Exonerado - Transferencia gratuita", "tributo": "9997", "gratuita": true },
+        "30": { "descripcion": "Inafecto - Operación onerosa", "tributo": "9998", "gratuita": false },
+        "31": { "descripcion": "Inafecto - Retiro por bonificación", "tributo": "9998", "gratuita": true },
+        "32": { "descripcion": "Inafecto - Retiro", "tributo": "9998", "gratuita": true },
+        "33": { "descripcion": "Inafecto - Retiro por muestras médicas", "tributo": "9998", "gratuita": true },
+        "34": { "descripcion": "Inafecto - Retiro por convenio colectivo", "tributo": "9998", "gratuita": true },
+        "35": { "descripcion": "Inafecto - Retiro por premio", "tributo": "9998", "gratuita": true },
+        "36": { "descripcion": "Inafecto - Retiro por publicidad", "tributo": "9998", "gratuita": true },
+        "40": { "descripcion": "Exportación de bienes o servicios", "tributo": "9995", "gratuita": false }
+      }
+    },
+    "08": {
+      "nombre": "Tipo de sistema de cálculo del ISC",
+      "ubl": { "elemento": "cac:TaxCategory/cbc:TierRange (solo en TaxSubtotal con TaxScheme/cbc:ID = 2000)", "listAgencyName": "PE:SUNAT", "listName": "Tipo de Sistema ISC", "listURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo08" },
+      "matriz": "X04",
+      "regla": "RN-07",
+      "valores": {
+        "01": { "descripcion": "Sistema al valor", "formula": "ISC = valorVenta × tasa" },
+        "02": { "descripcion": "Aplicación del monto fijo", "formula": "ISC = cantidad × montoFijo" },
+        "03": { "descripcion": "Sistema de precios de venta al público", "formula": "ISC = (PVP × cantidad / (1 + tasaIGV)) × tasa" }
+      },
+      "efecto": "baseIGV = valorVenta + ISC"
+    },
+    "09": {
+      "nombre": "Tipo de nota de crédito",
+      "ubl": { "elemento": "cac:DiscrepancyResponse/cbc:ResponseCode", "listAgencyName": "PE:SUNAT", "listURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo09" },
+      "valores": { "01": "Anulación de la operación", "02": "Anulación por error en el RUC", "03": "Corrección por error en la descripción", "04": "Descuento global", "05": "Descuento por ítem", "06": "Devolución total", "07": "Devolución por ítem", "08": "Bonificación", "09": "Disminución en el valor", "13": "Ajustes – montos y/o fechas de pago" }
+    },
+    "10": {
+      "nombre": "Tipo de nota de débito",
+      "ubl": { "elemento": "cac:DiscrepancyResponse/cbc:ResponseCode", "listAgencyName": "PE:SUNAT", "listURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo10" },
+      "valores": { "01": "Intereses por mora", "02": "Aumento en el valor", "03": "Penalidades / otros conceptos" }
+    },
+    "16": {
+      "nombre": "Tipo de precio de venta unitario",
+      "ubl": { "elemento": "cac:AlternativeConditionPrice/cbc:PriceTypeCode", "listAgencyName": "PE:SUNAT", "listName": "Tipo de Precio", "listURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16" },
+      "matriz": "L08",
+      "valores": { "01": "Precio unitario (incluye el IGV)", "02": "Valor referencial unitario en operaciones no onerosas" }
+    },
+    "25": {
+      "nombre": "Código de producto SUNAT (UNSPSC)",
+      "ubl": { "elemento": "cac:CommodityClassification/cbc:ItemClassificationCode", "listID": "UNSPSC", "listAgencyName": "GS1 US", "listName": "Item Classification" },
+      "matriz": "L06",
+      "patron": "^\\d{8}$"
+    },
+    "51": {
+      "nombre": "Tipo de operación",
+      "ubl": { "elemento": "cbc:InvoiceTypeCode/@listID", "name": "Tipo de Operacion", "listSchemeURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51" },
+      "matriz": "T08",
+      "valores": { "0101": "Venta interna", "0200": "Exportación de bienes" }
+    },
+    "52": {
+      "nombre": "Códigos de leyendas",
+      "ubl": { "elemento": "cbc:Note/@languageLocaleID" },
+      "matriz": "T09",
+      "valores": { "1000": "Monto expresado en letras", "1002": "Transferencia gratuita de un bien y/o servicio prestado gratuitamente" }
+    },
+    "53": {
+      "nombre": "Códigos de cargos, descuentos y otras deducciones",
+      "ubl": { "elemento": "cac:AllowanceCharge/cbc:AllowanceChargeReasonCode" },
+      "matriz": "M03",
+      "valores": { "00": "Descuento que afecta la base imponible (ítem)", "01": "Descuento que no afecta la base imponible (ítem)", "02": "Descuento global que afecta la base imponible", "03": "Descuento global que no afecta la base imponible" }
+    }
+  }
+}

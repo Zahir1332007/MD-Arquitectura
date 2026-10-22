@@ -235,7 +235,7 @@ totales y hash; SUNAT/OSE rechaza el comprobante por inconsistencia de montos.
 | RN-05 | Fecha de emisión no futura y dentro del plazo máximo de envío vigente (parámetro configurable) | N-01 | `FECHA_FUERA_DE_PLAZO` |
 | RN-06 | Factura exige cliente con RUC (salvo exportación); Boleta exige DNI/doc si el importe supera el umbral vigente (S/ 700) | N-01 | `CLIENTE_REQUERIDO` |
 | RN-07 | Cálculo por línea: `ISC` según Cat. 08 → `baseIGV = valorVenta + ISC` → `IGV = baseIGV × 18 %` (solo si Cat. 07 = gravado) → `ICBPER = cantidad × tasa vigente` | N-04 | `MONTOS_INCONSISTENTES` |
-| RN-08 | Totales: `LineExtensionAmount = Σ valorVenta`; `TaxInclusiveAmount = LineExtension + Σ tributos`; `PayableAmount = TaxInclusive − descuentos + cargos`; redondeo a 2 decimales con tolerancia ±1 | N-05 | `TOTALES_INCONSISTENTES` |
+| RN-08 | Totales: `LineExtensionAmount = Σ valorVenta − descuentos globales que afectan la base (Cat. 53 '02')`; `TaxInclusiveAmount = LineExtension + Σ tributos`; `PayableAmount = TaxInclusive − descuentos que no afectan la base ('03') + cargos − anticipos`; redondeo a 2 decimales con tolerancia ±1 | N-05 | `TOTALES_INCONSISTENTES` |
 | RN-09 | Moneda distinta de PEN requiere tipo de cambio | N-04 | `TIPO_CAMBIO_REQUERIDO` |
 | RN-10 | Forma de pago `Credito` exige fecha de vencimiento y cuotas cuya suma = monto neto pendiente | N-05 | `CUOTAS_INVALIDAS` |
 | RN-11 | El XML debe validar contra `UBL-Invoice-2.1.xsd` y cumplir la personalización UBL 2.1 Perú (`CustomizationID` 2.0, atributos `PE:SUNAT`, elementos obligatorios de la matriz 04) antes de firmarse | T-01, N-05 | `XML_NO_VALIDA_XSD` |

@@ -704,7 +704,7 @@ components:
           default: 0
           description: Descuento global que afecta la base imponible
           x-ubl:
-            elemento: /Invoice/cac:AllowanceCharge (cbc:ChargeIndicator=false, cbc:AllowanceChargeReasonCode=02 Cat. 53) y LegalMonetaryTotal/cbc:AllowanceTotalAmount
+            elemento: '/Invoice/cac:AllowanceCharge (cbc:ChargeIndicator=false, cbc:AllowanceChargeReasonCode=02 Cat. 53); reduce LegalMonetaryTotal/cbc:LineExtensionAmount y la base del IGV. Los descuentos que no afectan la base (03) van en cbc:AllowanceTotalAmount'
           x-sunat: { matriz: M03, catalogo: '53', regla: RN-08 }
         observaciones:
           type: string
@@ -718,7 +718,7 @@ components:
         formaPago: { tipo: Contado }
         cliente:
           tipoDoc: '6'
-          numeroDoc: '20600000001'
+          numeroDoc: '20600000005'
           razonSocial: DISTRIBUIDORA AMAZONAS E.I.R.L.
         items:
           - { codigoProducto: PROD-001, cantidad: 10, valorUnitario: 100.00 }
@@ -984,10 +984,10 @@ components:
         qr:
           type: string
           description: 'Cadena del QR de la representación impresa: RUC|TIPO|SERIE|NUMERO|IGV|TOTAL|FECHA|TIPO DOC ADQ|NUM DOC ADQ|HASH'
-          example: '20123456789|01|F001|1|180.00|1180.00|2026-10-22|6|20600000001|qW2a...'
+          example: '20123456786|01|F001|1|180.00|1180.00|2026-10-22|6|20600000005|qW2a...'
         nombreArchivo:
           type: string
-          example: 20123456789-01-F001-1.zip
+          example: 20123456786-01-F001-1.zip
           x-sunat: { formato: '{RUC}-{TipoDoc}-{Serie}-{Correlativo}.zip' }
         respuestaSunat: { $ref: '#/components/schemas/RespuestaSunatDto' }
         enlaces:
@@ -1185,7 +1185,7 @@ x-servicios-externos:
       sendBill: "Envío síncrono de factura/boleta/nota (ZIP con XML firmado) -> applicationResponse (CDR ZIP)"
       sendSummary: "Envío asíncrono de resumen diario (RC) o comunicación de baja (RA) -> ticket"
       getStatus: "Consulta del ticket -> statusCode + CDR"
-    nombreArchivo: "{RUC}-{tipo}-{serie}-{correlativo}.zip, p. ej. 20123456789-01-F001-1.zip"
+    nombreArchivo: "{RUC}-{tipo}-{serie}-{correlativo}.zip, p. ej. 20123456786-01-F001-1.zip"
   ose:
     descripcion: Mismo contrato SOAP que SUNAT (sendBill, sendSummary, getStatus); cambia el endpoint y credenciales
     puerto: EnvioSunatPort
