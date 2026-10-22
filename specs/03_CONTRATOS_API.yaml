@@ -1,0 +1,1194 @@
+# 3. Especificación de Endpoints / Servicios (Contratos API)
+#
+# Fase 1 (monolito MVC): estos contratos son la interfaz de los Controladores/casos de uso (llamadas internas en proceso).
+# Fase 2+ (Hexagonal / microservicios): se exponen tal cual como API REST mediante un adaptador de entrada.
+# Los servicios externos SUNAT/OSE (SOAP) se describen al final en x-servicios-externos.
+openapi: 3.0.3
+info:
+  title: API de Facturación Electrónica - ABC Software Corp
+  version: 1.0.0
+  description: >
+    Contrato Spec-First para la emisión de comprobantes electrónicos UBL 2.1 Perú (estructura 2.0 SUNAT, RS 097-2012/SUNAT),
+    gestión de maestros y migración de datos legados. Los códigos RN-xx se definen en
+    docs/01_MODELO_DE_DOMINIO.md y los CU-xx en docs/05_CASOS_DE_USO.md.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Adaptador REST (fase 2)
+tags:
+  - name: Comprobantes
+  - name: Resumenes
+  - name: Maestros
+  - name: Configuracion
+  - name: Migracion
+  - name: Reportes
+security:
+  - bearerAuth: []
+
+paths:
+  /comprobantes:
+    post:
+      tags: [Comprobantes]
+      operationId: emitirComprobante
+      summary: "EP-01 Emitir factura o boleta (CU-01, CU-02)"
+      description: >
+        El correlativo, los tributos y los totales los calcula el dominio; no se reciben del cliente.
+        Si no hay conexión con OSE/SUNAT el comprobante queda PENDIENTE_ENVIO y se responde 202.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmitirComprobanteRequest'
+      responses:
+        '201':
+          description: Comprobante emitido y respondido por SUNAT/OSE (ACEPTADO, ACEPTADO_CON_OBS o RECHAZADO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComprobanteResponse'
+        '202':
+          description: Comprobante firmado y encolado (PENDIENTE_ENVIO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComprobanteResponse'
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+    get:
+      tags: [Comprobantes]
+      operationId: listarComprobantes
+      summary: "EP-02 Listar comprobantes con filtros (CU-07)"
+      parameters:
+        - { name: tipo, in: query, schema: { $ref: '#/components/schemas/TipoComprobante' } }
+        - { name: estado, in: query, schema: { $ref: '#/components/schemas/EstadoComprobante' } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: numeroDocCliente, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Página de comprobantes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ComprobanteResponse'
+
+  /comprobantes/{id}:
+    get:
+      tags: [Comprobantes]
+      operationId: obtenerComprobante
+      summary: "EP-03 Obtener comprobante y su estado (CU-07)"
+      parameters:
+        - $ref: '#/components/parameters/ComprobanteId'
+      responses:
+        '200':
+          description: Comprobante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComprobanteResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /comprobantes/{id}/archivos/{formato}:
+    get:
+      tags: [Comprobantes]
+      operationId: descargarArchivo
+      summary: "EP-04 Descargar XML firmado, CDR o representación impresa (CU-08)"
+      parameters:
+        - $ref: '#/components/parameters/ComprobanteId'
+        - name: formato
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [xml, cdr, pdf]
+      responses:
+        '200':
+          description: Archivo
+          content:
+            application/xml: { schema: { type: string, format: binary } }
+            application/zip: { schema: { type: string, format: binary } }
+            application/pdf: { schema: { type: string, format: binary } }
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /comprobantes/{id}/correo:
+    post:
+      tags: [Comprobantes]
+      operationId: enviarCorreo
+      summary: "EP-04b Enviar PDF y XML al correo del cliente (CU-08)"
+      parameters:
+        - $ref: '#/components/parameters/ComprobanteId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                destinatarios:
+                  type: array
+                  items: { type: string, format: email }
+      responses:
+        '202':
+          description: Envío encolado
+
+  /comprobantes/{id}/notas:
+    post:
+      tags: [Comprobantes]
+      operationId: emitirNota
+      summary: "EP-05 Emitir nota de crédito o débito sobre un comprobante (CU-03, CU-04)"
+      parameters:
+        - $ref: '#/components/parameters/ComprobanteId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotaRequest'
+      responses:
+        '201':
+          description: Nota emitida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComprobanteResponse'
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+
+  /comprobantes/{id}/baja:
+    post:
+      tags: [Comprobantes]
+      operationId: darDeBaja
+      summary: "EP-06 Anular mediante comunicación de baja (facturas) o resumen diario (boletas) (CU-05)"
+      parameters:
+        - $ref: '#/components/parameters/ComprobanteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BajaRequest'
+      responses:
+        '202':
+          description: Baja enviada; SUNAT devuelve ticket para consulta asíncrona
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+
+  /resumenes-diarios:
+    post:
+      tags: [Resumenes]
+      operationId: enviarResumenDiario
+      summary: "EP-07 Generar y enviar el resumen diario de boletas de una fecha (CU-06)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fechaEmisionComprobantes]
+              properties:
+                fechaEmisionComprobantes: { type: string, format: date }
+      responses:
+        '202':
+          description: Resumen enviado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+
+  /resumenes-diarios/{ticket}:
+    get:
+      tags: [Resumenes]
+      operationId: consultarTicket
+      summary: "EP-07b Consultar ticket de resumen diario o comunicación de baja (getStatus)"
+      parameters:
+        - { name: ticket, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Estado del ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+
+  /clientes:
+    post:
+      tags: [Maestros]
+      operationId: registrarCliente
+      summary: "EP-08 Registrar o actualizar cliente (CU-09)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClienteDto'
+      responses:
+        '201':
+          description: Cliente registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDto'
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+
+  /clientes/validacion/{tipoDoc}/{numeroDoc}:
+    get:
+      tags: [Maestros]
+      operationId: validarDocumento
+      summary: "EP-09 Validar RUC/DNI: formato, dígito verificador y consulta al padrón (RN-01, RN-02)"
+      parameters:
+        - { name: tipoDoc, in: path, required: true, schema: { $ref: '#/components/schemas/TipoDocIdentidad' } }
+        - { name: numeroDoc, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Resultado de la validación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidacionDocumentoResponse'
+
+  /productos:
+    post:
+      tags: [Maestros]
+      operationId: registrarProducto
+      summary: "EP-10 Registrar producto con su configuración tributaria (CU-10)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoDto'
+      responses:
+        '201':
+          description: Producto registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoDto'
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+    get:
+      tags: [Maestros]
+      operationId: buscarProductos
+      summary: "EP-10b Buscar productos"
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Productos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductoDto'
+
+  /configuracion/emisor:
+    put:
+      tags: [Configuracion]
+      operationId: configurarEmisor
+      summary: "EP-11 Configurar emisor, certificado digital y credenciales OSE/SOL (CU-11)"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [ruc, razonSocial, certificado, claveCertificado]
+              properties:
+                ruc:
+                  type: string
+                  pattern: '^(10|15|16|17|20)\d{9}$'
+                  x-ubl: { elemento: 'cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID (schemeID="6") y cac:Signature/cac:SignatoryParty' }
+                  x-sunat: { matriz: [E01, T13], formato: n11, regla: RN-01 }
+                razonSocial:
+                  type: string
+                  maxLength: 1500
+                  x-ubl: { elemento: cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName }
+                  x-sunat: { matriz: E03, formato: an..1500 }
+                nombreComercial:
+                  type: string
+                  maxLength: 1500
+                  x-ubl: { elemento: cac:AccountingSupplierParty/cac:Party/cac:PartyName/cbc:Name }
+                  x-sunat: { matriz: E02, formato: an..1500 }
+                ubigeo:
+                  type: string
+                  pattern: '^\d{6}$'
+                  x-ubl: { elemento: 'cac:RegistrationAddress/cbc:ID (schemeName="Ubigeos" schemeAgencyName="PE:INEI")' }
+                  x-sunat: { matriz: E05, formato: an6 }
+                direccion:
+                  type: string
+                  maxLength: 200
+                  x-ubl: { elemento: cac:RegistrationAddress/cac:AddressLine/cbc:Line }
+                  x-sunat: { matriz: E05, formato: an..200 }
+                codigoEstablecimiento:
+                  type: string
+                  pattern: '^\d{4}$'
+                  default: '0000'
+                  x-ubl: { elemento: 'cac:RegistrationAddress/cbc:AddressTypeCode (listAgencyName="PE:SUNAT" listName="Establecimientos anexos")' }
+                  x-sunat: { matriz: E04, formato: an4 }
+                certificado: { type: string, format: binary, description: Archivo .pfx }
+                claveCertificado: { type: string, format: password }
+                usuarioSol: { type: string }
+                claveSol: { type: string, format: password }
+                destinoEnvio: { type: string, enum: [SUNAT, OSE] }
+      responses:
+        '204':
+          description: Configuración guardada (secretos en almacén seguro del SO)
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+
+  /configuracion/series:
+    post:
+      tags: [Configuracion]
+      operationId: crearSerie
+      summary: "EP-12 Crear serie por tipo de comprobante (RN-03)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SerieDto'
+      responses:
+        '201':
+          description: Serie creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerieDto'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+
+  /migraciones:
+    post:
+      tags: [Migracion]
+      operationId: cargarLoteLegado
+      summary: "EP-13 Cargar archivo del software legado a staging y validar (CU-12)"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary, description: "CSV con columnas fecha, ingreso, salida, producto, nro_documento" }
+                formatoFecha: { type: string, example: dd/MM/yyyy }
+      responses:
+        '201':
+          description: Lote creado en estado VALIDADO con vista previa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoteMigracionResponse'
+        '409':
+          description: Ya existe un lote con el mismo hash de archivo (idempotencia)
+
+  /migraciones/{loteId}/ejecucion:
+    post:
+      tags: [Migracion]
+      operationId: ejecutarLote
+      summary: "EP-14 Confirmar y ejecutar la migración del lote con reconciliación (RN-13)"
+      parameters:
+        - $ref: '#/components/parameters/LoteId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                aceptarFilasRechazadas: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Lote migrado o revertido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoteMigracionResponse'
+
+  /migraciones/{loteId}:
+    get:
+      tags: [Migracion]
+      operationId: obtenerLote
+      summary: "EP-15 Consultar lote, rechazos y trazabilidad (fila origen -> registro nuevo)"
+      parameters:
+        - $ref: '#/components/parameters/LoteId'
+      responses:
+        '200':
+          description: Lote
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoteMigracionResponse'
+
+  /envios/pendientes/reintento:
+    post:
+      tags: [Comprobantes]
+      operationId: reintentarPendientes
+      summary: "EP-16 Reenviar comprobantes PENDIENTE_ENVIO (CU-13)"
+      responses:
+        '200':
+          description: Resultado del reintento
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  procesados: { type: integer }
+                  aceptados: { type: integer }
+                  rechazados: { type: integer }
+                  siguenPendientes: { type: integer }
+
+  /reportes/{tipo}:
+    get:
+      tags: [Reportes]
+      operationId: generarReporte
+      summary: "EP-17 Registro de ventas o kardex por periodo (CU-14, RS 234-2006)"
+      parameters:
+        - name: tipo
+          in: path
+          required: true
+          schema: { type: string, enum: [registro-ventas, kardex] }
+        - { name: periodo, in: query, required: true, schema: { type: string, pattern: '^\d{6}$', example: '202610' } }
+        - { name: formato, in: query, schema: { type: string, enum: [json, xlsx, txt], default: json } }
+      responses:
+        '200':
+          description: Reporte
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ComprobanteId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LoteId:
+      name: loteId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Evita emitir dos veces el mismo comprobante si la UI reintenta (protege RN-04)
+      schema: { type: string, format: uuid }
+
+  responses:
+    ErrorValidacion:
+      description: Una o más reglas RN-xx no se cumplen
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflicto:
+      description: Conflicto de estado (correlativo duplicado, comprobante inmutable, etc.)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NoEncontrado:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  # Coordinación UBL ↔ SUNAT: cada campo declara
+  #   x-ubl:   elemento XPath del XML UBL 2.1 Perú y atributos que lo acompañan
+  #   x-sunat: fila de la matriz (docs/04_MATRIZ_TRAZABILIDAD.md), catálogo del Anexo 8, formato de la guía SUNAT y regla RN-xx
+  # Las restricciones JSON (pattern, maxLength, enum) se derivan del formato SUNAT, así un dato inválido se rechaza en la API
+  # antes de llegar a generar el XML. Las propiedades con $ref usan allOf para poder llevar x-ubl/x-sunat (OpenAPI 3.0).
+  schemas:
+    # ---------- Catálogos SUNAT (Anexo 8) con su codificación UBL 2.1 Perú ----------
+    TipoComprobante:
+      description: Catálogo 01 - Tipo de documento
+      type: string
+      enum: ['01', '03', '07', '08']
+      x-ubl:
+        elemento: /Invoice/cbc:InvoiceTypeCode (01, 03) | /CreditNote (07) | /DebitNote (08)
+        atributos: listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01"
+      x-sunat: { matriz: T07, catalogo: '01', formato: an2 }
+    Moneda:
+      description: Catálogo 02 - Moneda (ISO 4217)
+      type: string
+      enum: [PEN, USD]
+      x-ubl:
+        elemento: /Invoice/cbc:DocumentCurrencyCode y @currencyID de todos los montos
+        atributos: listID="ISO 4217 Alpha" listName="Currency" listAgencyName="United Nations Economic Commission for Europe"
+      x-sunat: { matriz: T10, catalogo: '02', formato: an3, regla: RN-09 }
+    UnidadMedida:
+      description: Catálogo 03 - Unidad de medida (UN/ECE Rec. 20)
+      type: string
+      pattern: '^[A-Z0-9]{1,3}$'
+      example: NIU
+      x-ubl:
+        elemento: cac:InvoiceLine/cbc:InvoicedQuantity/@unitCode
+        atributos: unitCodeListID="UN/ECE rec 20" unitCodeListAgencyName="United Nations Economic Commission for Europe"
+      x-sunat: { matriz: L03, catalogo: '03', formato: an..3 }
+    CodigoTributo:
+      description: Catálogo 05 - Código de tributo
+      type: string
+      enum: ['1000', '1016', '2000', '7152', '9995', '9996', '9997', '9998', '9999']
+      x-ubl:
+        elemento: cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID
+        atributos: schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05"
+        derivados:
+          '1000': { Name: IGV, TaxTypeCode: VAT }
+          '1016': { Name: IVAP, TaxTypeCode: VAT }
+          '2000': { Name: ISC, TaxTypeCode: EXC }
+          '7152': { Name: ICBPER, TaxTypeCode: OTH }
+          '9995': { Name: EXP, TaxTypeCode: FRE }
+          '9996': { Name: GRA, TaxTypeCode: FRE }
+          '9997': { Name: EXO, TaxTypeCode: VAT }
+          '9998': { Name: INA, TaxTypeCode: FRE }
+          '9999': { Name: OTROS, TaxTypeCode: OTH }
+      x-sunat: { matriz: X01, catalogo: '05', formato: an4, regla: RN-07 }
+    TipoDocIdentidad:
+      description: Catálogo 06 - Tipo de documento de identidad
+      type: string
+      enum: ['0', '1', '4', '6', '7', 'A', '-']
+      x-ubl:
+        elemento: cac:PartyIdentification/cbc:ID/@schemeID
+        atributos: schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06"
+      x-sunat: { matriz: [E01, R01], catalogo: '06', formato: an1, regla: RN-02 }
+    TipoAfectacionIgv:
+      description: Catálogo 07 - Tipo de afectación del IGV
+      type: string
+      enum: ['10', '11', '12', '13', '14', '15', '16', '17', '20', '21', '30', '31', '32', '33', '34', '35', '36', '40']
+      x-ubl:
+        elemento: cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:TaxExemptionReasonCode
+        atributos: listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07"
+        derivados: "10-17 -> tributo 1000 IGV; 20-21 -> 9997 EXO; 30-36 -> 9998 INA; 40 -> 9995 EXP; gratuitas (11-17, 21, 31-36) -> 9996 GRA en el resumen"
+      x-sunat: { matriz: X02, catalogo: '07', formato: an2, regla: RN-07 }
+    SistemaIsc:
+      description: "Catálogo 08 - Sistema de cálculo del ISC: 01 Sistema al valor, 02 Aplicación del monto fijo, 03 Sistema de precios de venta al público"
+      type: string
+      enum: ['01', '02', '03']
+      x-ubl:
+        elemento: cac:TaxSubtotal/cac:TaxCategory/cbc:TierRange (solo cuando TaxScheme/cbc:ID = 2000)
+        atributos: listAgencyName="PE:SUNAT" listName="Tipo de Sistema ISC" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo08"
+      x-sunat: { matriz: X04, catalogo: '08', formato: an2, regla: RN-07 }
+    MotivoNota:
+      description: Catálogo 09 (nota de crédito) o 10 (nota de débito)
+      type: string
+      pattern: '^\d{2}$'
+      example: '01'
+      x-ubl:
+        elemento: /CreditNote|/DebitNote/cac:DiscrepancyResponse/cbc:ResponseCode
+        atributos: listAgencyName="PE:SUNAT" listName="Tipo de nota de credito|debito" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo09|catalogo10"
+      x-sunat: { catalogo: ['09', '10'], formato: an2 }
+    TipoPrecio:
+      description: Catálogo 16 - Tipo de precio
+      type: string
+      enum: ['01', '02']
+      x-ubl:
+        elemento: cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceTypeCode
+        atributos: listName="Tipo de Precio" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16"
+      x-sunat: { matriz: L08, catalogo: '16', formato: an2 }
+    TipoOperacion:
+      description: Catálogo 51 - Tipo de operación
+      type: string
+      pattern: '^\d{4}$'
+      default: '0101'
+      x-ubl:
+        elemento: /Invoice/cbc:InvoiceTypeCode/@listID
+        atributos: name="Tipo de Operacion" listSchemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51"
+      x-sunat: { matriz: T08, catalogo: '51', formato: an4 }
+    Importe:
+      description: Monto con formato SUNAT n(12,2)
+      type: number
+      minimum: 0
+      maximum: 999999999999.99
+      x-ubl: { atributos: currencyID = moneda del comprobante }
+      x-sunat: { formato: 'n(12,2)' }
+    ValorUnitario:
+      description: Valor, precio o cantidad con formato SUNAT n(12,10)
+      type: number
+      minimum: 0
+      maximum: 999999999999.9999999999
+      x-sunat: { formato: 'n(12,10)' }
+    EstadoComprobante:
+      description: Estado interno; se deriva del código del CDR (ver RespuestaSunatDto)
+      type: string
+      enum: [BORRADOR, VALIDADO, FIRMADO, PENDIENTE_ENVIO, ENVIADO, ACEPTADO, ACEPTADO_CON_OBS, RECHAZADO, ANULADO]
+
+    # ---------- DTOs de entrada ----------
+    EmitirComprobanteRequest:
+      type: object
+      required: [tipoComprobante, serie, cliente, items]
+      x-ubl: { documento: '/Invoice (UBL-Invoice-2.1.xsd, CustomizationID 2.0 PE:SUNAT)' }
+      x-sunat:
+        generadosPorElSistema:
+          - "T01 cbc:UBLVersionID = 2.1"
+          - "T02 cbc:CustomizationID = 2.0"
+          - "T03 cbc:ID = serie + '-' + correlativo (RN-04)"
+          - "T05 cbc:IssueTime"
+          - "T09 cbc:Note 1000 (monto en letras)"
+          - "T11 cbc:LineCountNumeric"
+          - "T12/T13 firma"
+          - "E01-E05 emisor (desde configuración)"
+          - "X01-X09 tributos y M01-M06 totales (RN-07, RN-08)"
+      properties:
+        tipoComprobante:
+          allOf: [{ $ref: '#/components/schemas/TipoComprobante' }]
+          enum: ['01', '03']
+          x-sunat: { matriz: T07, regla: RN-03 }
+        serie:
+          type: string
+          pattern: '^[FB][A-Z0-9]{3}$'
+          example: F001
+          description: "F### para factura, B### para boleta; debe coincidir con tipoComprobante. El correlativo lo asigna el sistema."
+          x-ubl: { elemento: '/Invoice/cbc:ID (parte antes del guion)' }
+          x-sunat: { matriz: T03, formato: 'an4', regla: [RN-03, RN-04] }
+        fechaEmision:
+          type: string
+          format: date
+          description: Por defecto la fecha actual
+          x-ubl: { elemento: /Invoice/cbc:IssueDate }
+          x-sunat: { matriz: T04, formato: 'an..10 YYYY-MM-DD', regla: RN-05 }
+        tipoOperacion:
+          allOf: [{ $ref: '#/components/schemas/TipoOperacion' }]
+          x-sunat: { matriz: T08 }
+        moneda:
+          allOf: [{ $ref: '#/components/schemas/Moneda' }]
+          default: PEN
+          x-sunat: { matriz: T10 }
+        tipoCambio:
+          type: number
+          minimum: 0
+          description: Obligatorio si moneda != PEN. No viaja en el XML; se usa para el Registro de Ventas (RS 234-2006).
+          x-ubl: { elemento: null }
+          x-sunat: { regla: RN-09 }
+        formaPago:
+          allOf: [{ $ref: '#/components/schemas/FormaPagoDto' }]
+          x-sunat: { matriz: T14 }
+        cliente:
+          allOf: [{ $ref: '#/components/schemas/ClienteDto' }]
+          x-ubl: { elemento: /Invoice/cac:AccountingCustomerParty }
+          x-sunat: { matriz: [R01, R02], regla: RN-06 }
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ItemRequest'
+          x-ubl: { elemento: /Invoice/cac:InvoiceLine }
+        descuentoGlobal:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          default: 0
+          description: Descuento global que afecta la base imponible
+          x-ubl:
+            elemento: /Invoice/cac:AllowanceCharge (cbc:ChargeIndicator=false, cbc:AllowanceChargeReasonCode=02 Cat. 53) y LegalMonetaryTotal/cbc:AllowanceTotalAmount
+          x-sunat: { matriz: M03, catalogo: '53', regla: RN-08 }
+        observaciones:
+          type: string
+          maxLength: 200
+          x-ubl: { elemento: /Invoice/cbc:Note (sin languageLocaleID) }
+          x-sunat: { formato: an..200 }
+      example:
+        tipoComprobante: '01'
+        serie: F001
+        moneda: PEN
+        formaPago: { tipo: Contado }
+        cliente:
+          tipoDoc: '6'
+          numeroDoc: '20600000001'
+          razonSocial: DISTRIBUIDORA AMAZONAS E.I.R.L.
+        items:
+          - { codigoProducto: PROD-001, cantidad: 10, valorUnitario: 100.00 }
+
+    ItemRequest:
+      type: object
+      required: [codigoProducto, cantidad]
+      description: >
+        Se envía valorUnitario (sin tributos) o precioUnitario (con tributos), no ambos.
+        Unidad, afectación IGV, ISC (Cat. 08), ICBPER y código UNSPSC se toman del producto salvo que se sobrescriban.
+      x-ubl: { elemento: /Invoice/cac:InvoiceLine (cbc:ID = posición en la lista, L01) }
+      properties:
+        codigoProducto:
+          type: string
+          maxLength: 30
+          x-ubl: { elemento: cac:Item/cac:SellersItemIdentification/cbc:ID }
+          x-sunat: { matriz: L05, formato: an..30 }
+        descripcion:
+          type: string
+          maxLength: 500
+          x-ubl: { elemento: cac:Item/cbc:Description }
+          x-sunat: { matriz: L04, formato: an..500 }
+        unidadMedida:
+          allOf: [{ $ref: '#/components/schemas/UnidadMedida' }]
+          x-sunat: { matriz: L03 }
+        cantidad:
+          allOf: [{ $ref: '#/components/schemas/ValorUnitario' }]
+          minimum: 0
+          exclusiveMinimum: true
+          x-ubl: { elemento: cbc:InvoicedQuantity }
+          x-sunat: { matriz: L02 }
+        valorUnitario:
+          allOf: [{ $ref: '#/components/schemas/ValorUnitario' }]
+          description: Sin tributos
+          x-ubl: { elemento: cac:Price/cbc:PriceAmount }
+          x-sunat: { matriz: L07, regla: RN-07 }
+        precioUnitario:
+          allOf: [{ $ref: '#/components/schemas/ValorUnitario' }]
+          description: Con tributos; el sistema deriva el valor unitario
+          x-ubl: { elemento: 'cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount (PriceTypeCode 01; 02 si es gratuito)' }
+          x-sunat: { matriz: L08, catalogo: '16', regla: RN-07 }
+        tipoAfectacionIgv:
+          allOf: [{ $ref: '#/components/schemas/TipoAfectacionIgv' }]
+          x-sunat: { matriz: X02 }
+        tipoPrecio:
+          allOf: [{ $ref: '#/components/schemas/TipoPrecio' }]
+          default: '01'
+          description: "01 precio unitario; 02 valor referencial (operación gratuita, afectación 11-17, 21, 31-36)"
+        descuento:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          default: 0
+          x-ubl: { elemento: 'cac:InvoiceLine/cac:AllowanceCharge (ChargeIndicator=false, AllowanceChargeReasonCode=00 Cat. 53)' }
+          x-sunat: { catalogo: '53', regla: RN-07 }
+      oneOf:
+        - required: [valorUnitario]
+        - required: [precioUnitario]
+
+    FormaPagoDto:
+      type: object
+      required: [tipo]
+      x-ubl: { elemento: '/Invoice/cac:PaymentTerms (cbc:ID = "FormaPago")' }
+      x-sunat: { matriz: T14, regla: RN-10 }
+      properties:
+        tipo:
+          type: string
+          enum: [Contado, Credito]
+          x-ubl: { elemento: cac:PaymentTerms/cbc:PaymentMeansID }
+        cuotas:
+          type: array
+          description: Obligatorio si tipo = Credito; la suma es el monto neto pendiente de pago
+          x-ubl: { elemento: 'un cac:PaymentTerms por cuota con cbc:PaymentMeansID = Cuota001, Cuota002...; la fecha de la última va también en /Invoice/cbc:DueDate (T06)' }
+          items:
+            type: object
+            required: [monto, fechaVencimiento]
+            properties:
+              monto:
+                allOf: [{ $ref: '#/components/schemas/Importe' }]
+                x-ubl: { elemento: cac:PaymentTerms/cbc:Amount }
+              fechaVencimiento:
+                type: string
+                format: date
+                x-ubl: { elemento: cac:PaymentTerms/cbc:PaymentDueDate }
+
+    ClienteDto:
+      type: object
+      required: [tipoDoc, numeroDoc, razonSocial]
+      x-ubl: { elemento: /Invoice/cac:AccountingCustomerParty/cac:Party }
+      properties:
+        tipoDoc:
+          allOf: [{ $ref: '#/components/schemas/TipoDocIdentidad' }]
+          x-sunat: { matriz: R01 }
+        numeroDoc:
+          type: string
+          maxLength: 15
+          description: 'RUC: 11 dígitos con dígito verificador; DNI: 8 dígitos; otros: hasta 15 alfanuméricos'
+          x-ubl: { elemento: cac:PartyIdentification/cbc:ID }
+          x-sunat: { matriz: R01, formato: an..15, regla: RN-02 }
+        razonSocial:
+          type: string
+          maxLength: 1500
+          x-ubl: { elemento: cac:PartyLegalEntity/cbc:RegistrationName }
+          x-sunat: { matriz: R02, formato: an..1500 }
+        direccion:
+          type: string
+          maxLength: 200
+          x-ubl: { elemento: cac:PartyLegalEntity/cac:RegistrationAddress/cac:AddressLine/cbc:Line }
+          x-sunat: { formato: an..200 }
+        email:
+          type: string
+          format: email
+          x-ubl: { elemento: null }
+          description: Solo para el envío del comprobante (CU-08); no viaja en el XML
+      x-validacion-condicional:
+        '6': '^(10|15|16|17|20)\d{9}$ + dígito verificador módulo 11 (RN-01)'
+        '1': '^\d{8}$'
+
+    NotaRequest:
+      type: object
+      required: [tipoNota, serie, motivo, sustento]
+      x-ubl: { documento: '/CreditNote (UBL-CreditNote-2.1.xsd) o /DebitNote (UBL-DebitNote-2.1.xsd)' }
+      x-sunat:
+        generadosPorElSistema:
+          - "cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID y cbc:DocumentTypeCode (documento afectado, desde {id})"
+          - "cac:DiscrepancyResponse/cbc:ReferenceID (número del documento afectado)"
+      properties:
+        tipoNota:
+          type: string
+          enum: ['07', '08']
+          x-sunat: { catalogo: '01' }
+        serie:
+          type: string
+          pattern: '^[FB][A-Z0-9]{3}$'
+          description: Misma letra inicial que el documento afectado
+          x-ubl: { elemento: '/CreditNote|/DebitNote/cbc:ID (serie)' }
+          x-sunat: { regla: RN-03 }
+        motivo:
+          allOf: [{ $ref: '#/components/schemas/MotivoNota' }]
+        sustento:
+          type: string
+          maxLength: 250
+          x-ubl: { elemento: cac:DiscrepancyResponse/cbc:Description }
+          x-sunat: { formato: an..250 }
+        items:
+          type: array
+          description: Vacío para anulación total (motivo 01)
+          items: { $ref: '#/components/schemas/ItemRequest' }
+          x-ubl: { elemento: 'cac:CreditNoteLine | cac:DebitNoteLine' }
+
+    BajaRequest:
+      type: object
+      required: [motivo]
+      x-ubl: { documento: '/VoidedDocuments (esquema SUNAT, identificador RA-YYYYMMDD-n)' }
+      properties:
+        motivo:
+          type: string
+          maxLength: 100
+          example: Error en la descripción del cliente
+          x-ubl: { elemento: sac:VoidedDocumentsLine/sac:VoidReasonDescription }
+          x-sunat: { formato: an..100 }
+
+    ProductoDto:
+      type: object
+      required: [codigo, descripcion, unidadMedida, tipoAfectacionIgv]
+      description: Maestro; sus valores se copian a cada cac:InvoiceLine al emitir
+      properties:
+        codigo:
+          type: string
+          maxLength: 30
+          x-sunat: { matriz: L05, formato: an..30 }
+        descripcion:
+          type: string
+          maxLength: 500
+          x-sunat: { matriz: L04, formato: an..500 }
+        unidadMedida:
+          allOf: [{ $ref: '#/components/schemas/UnidadMedida' }]
+        codigoSunat:
+          type: string
+          pattern: '^\d{8}$'
+          example: '50151513'
+          x-ubl:
+            elemento: cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode
+            atributos: listID="UNSPSC" listAgencyName="GS1 US" listName="Item Classification"
+          x-sunat: { matriz: L06, catalogo: '25', formato: an..8 }
+        tipoAfectacionIgv:
+          allOf: [{ $ref: '#/components/schemas/TipoAfectacionIgv' }]
+        tributoPrincipal:
+          allOf: [{ $ref: '#/components/schemas/CodigoTributo' }]
+          default: '1000'
+          description: '1000 IGV en general; 1016 IVAP para arroz pilado'
+        valorUnitario:
+          allOf: [{ $ref: '#/components/schemas/ValorUnitario' }]
+        isc:
+          type: object
+          nullable: true
+          description: Solo para productos gravados con ISC (licores, cerveza, gaseosas, cigarrillos)
+          required: [sistema]
+          x-ubl: { elemento: 'TaxSubtotal con TaxScheme/cbc:ID = 2000, Name = ISC, TaxTypeCode = EXC' }
+          x-sunat: { matriz: [X04, X05], regla: RN-07 }
+          properties:
+            sistema:
+              allOf: [{ $ref: '#/components/schemas/SistemaIsc' }]
+            tasa:
+              type: number
+              description: Porcentaje (sistemas 01 y 03)
+              x-ubl: { elemento: cac:TaxCategory/cbc:Percent }
+            montoFijo:
+              allOf: [{ $ref: '#/components/schemas/Importe' }]
+              description: Monto por unidad (sistema 02)
+            precioVentaPublico:
+              allOf: [{ $ref: '#/components/schemas/Importe' }]
+              description: Precio sugerido (sistema 03)
+        afectoIcbper:
+          type: boolean
+          default: false
+          x-ubl: { elemento: 'TaxSubtotal con TaxScheme/cbc:ID = 7152, cbc:BaseUnitMeasure y cac:TaxCategory/cbc:PerUnitAmount' }
+          x-sunat: { matriz: X06 }
+        origenLegacy:
+          allOf: [{ $ref: '#/components/schemas/OrigenLegacyDto' }]
+
+    SerieDto:
+      type: object
+      required: [tipoComprobante, codigo]
+      properties:
+        tipoComprobante: { $ref: '#/components/schemas/TipoComprobante' }
+        codigo:
+          type: string
+          pattern: '^[FB][A-Z0-9]{3}$'
+          x-sunat: { matriz: T03, regla: RN-03 }
+        ultimoCorrelativo:
+          type: integer
+          minimum: 0
+          maximum: 99999999
+          readOnly: true
+          x-sunat: { matriz: T03, formato: 'n..8', regla: RN-04 }
+        dispositivo: { type: string, description: Una serie por caja/dispositivo para evitar duplicados }
+
+    # ---------- DTOs de salida (leídos del XML generado y del CDR) ----------
+    ComprobanteResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tipoComprobante: { $ref: '#/components/schemas/TipoComprobante' }
+        numero:
+          type: string
+          pattern: '^[FB][A-Z0-9]{3}-[0-9]{1,8}$'
+          example: F001-1
+          x-ubl: { elemento: /Invoice/cbc:ID }
+          x-sunat: { matriz: T03, formato: an..13 }
+        fechaEmision:
+          type: string
+          format: date
+          x-ubl: { elemento: /Invoice/cbc:IssueDate }
+          x-sunat: { matriz: T04 }
+        moneda: { $ref: '#/components/schemas/Moneda' }
+        cliente: { $ref: '#/components/schemas/ClienteDto' }
+        totales: { $ref: '#/components/schemas/TotalesDto' }
+        estado: { $ref: '#/components/schemas/EstadoComprobante' }
+        hash:
+          type: string
+          description: Valor resumen de la firma; se imprime en la representación impresa
+          x-ubl: { elemento: ext:UBLExtensions//ds:Signature/ds:SignedInfo/ds:Reference/ds:DigestValue }
+          x-sunat: { matriz: T12 }
+        qr:
+          type: string
+          description: 'Cadena del QR de la representación impresa: RUC|TIPO|SERIE|NUMERO|IGV|TOTAL|FECHA|TIPO DOC ADQ|NUM DOC ADQ|HASH'
+          example: '20123456789|01|F001|1|180.00|1180.00|2026-10-22|6|20600000001|qW2a...'
+        nombreArchivo:
+          type: string
+          example: 20123456789-01-F001-1.zip
+          x-sunat: { formato: '{RUC}-{TipoDoc}-{Serie}-{Correlativo}.zip' }
+        respuestaSunat: { $ref: '#/components/schemas/RespuestaSunatDto' }
+        enlaces:
+          type: object
+          properties:
+            xml: { type: string, format: uri }
+            cdr: { type: string, format: uri }
+            pdf: { type: string, format: uri }
+
+    TotalesDto:
+      type: object
+      properties:
+        totalGravado:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: '/Invoice/cac:TaxTotal/cac:TaxSubtotal[TaxScheme/ID=1000]/cbc:TaxableAmount' }
+        totalExonerado:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: '/Invoice/cac:TaxTotal/cac:TaxSubtotal[TaxScheme/ID=9997]/cbc:TaxableAmount' }
+        totalInafecto:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: '/Invoice/cac:TaxTotal/cac:TaxSubtotal[TaxScheme/ID=9998]/cbc:TaxableAmount' }
+        totalGratuito:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: '/Invoice/cac:TaxTotal/cac:TaxSubtotal[TaxScheme/ID=9996]/cbc:TaxableAmount' }
+        totalDescuentos:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: /Invoice/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount }
+          x-sunat: { matriz: M03 }
+        totalTributos:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: /Invoice/cac:TaxTotal/cbc:TaxAmount }
+          x-sunat: { matriz: X09 }
+        tributos:
+          type: array
+          items: { $ref: '#/components/schemas/TributoDto' }
+        valorVenta:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: /Invoice/cac:LegalMonetaryTotal/cbc:LineExtensionAmount }
+          x-sunat: { matriz: M01, regla: RN-08 }
+        precioVenta:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: /Invoice/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount }
+          x-sunat: { matriz: M02, regla: RN-08 }
+        importeTotal:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: /Invoice/cac:LegalMonetaryTotal/cbc:PayableAmount }
+          x-sunat: { matriz: M06, regla: RN-08 }
+        montoEnLetras:
+          type: string
+          x-ubl: { elemento: '/Invoice/cbc:Note[@languageLocaleID="1000"]' }
+          x-sunat: { matriz: T09, catalogo: '52' }
+
+    TributoDto:
+      type: object
+      x-ubl: { elemento: cac:TaxTotal/cac:TaxSubtotal }
+      properties:
+        codigo:
+          allOf: [{ $ref: '#/components/schemas/CodigoTributo' }]
+          x-sunat: { matriz: X01 }
+        nombre:
+          type: string
+          enum: [IGV, IVAP, ISC, ICBPER, EXP, GRA, EXO, INA, OTROS]
+          x-ubl: { elemento: cac:TaxCategory/cac:TaxScheme/cbc:Name }
+        codigoInternacional:
+          type: string
+          enum: [VAT, EXC, OTH, FRE]
+          x-ubl: { elemento: cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode }
+        base:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: cbc:TaxableAmount }
+          x-sunat: { matriz: X07 }
+        tasa:
+          type: number
+          x-ubl: { elemento: 'cac:TaxCategory/cbc:Percent (ICBPER: cbc:PerUnitAmount)' }
+          x-sunat: { matriz: [X03, X05, X06], formato: 'n(3,5)' }
+        monto:
+          allOf: [{ $ref: '#/components/schemas/Importe' }]
+          x-ubl: { elemento: cbc:TaxAmount }
+          x-sunat: { matriz: X08 }
+        sistemaIsc:
+          allOf: [{ $ref: '#/components/schemas/SistemaIsc' }]
+          x-sunat: { matriz: X04 }
+
+    RespuestaSunatDto:
+      type: object
+      description: Datos extraídos del CDR (ApplicationResponse UBL 2.1 devuelto por SUNAT/OSE)
+      properties:
+        codigo:
+          type: string
+          example: '0'
+          description: '0 aceptado -> ACEPTADO; 0100-1999 excepción -> PENDIENTE_ENVIO; 2000-3999 rechazo -> RECHAZADO; >=4000 observación -> ACEPTADO_CON_OBS'
+          x-ubl: { elemento: /ApplicationResponse/cac:DocumentResponse/cac:Response/cbc:ResponseCode }
+          x-sunat: { matriz: '4.7' }
+        descripcion:
+          type: string
+          example: La Factura numero F001-1, ha sido aceptada
+          x-ubl: { elemento: /ApplicationResponse/cac:DocumentResponse/cac:Response/cbc:Description }
+        observaciones:
+          type: array
+          items: { type: string }
+          x-ubl: { elemento: /ApplicationResponse/cbc:Note }
+        fecha:
+          type: string
+          format: date-time
+          x-ubl: { elemento: /ApplicationResponse/cbc:ResponseDate + cbc:ResponseTime }
+
+    TicketResponse:
+      type: object
+      properties:
+        ticket:
+          type: string
+          x-sunat: { origen: respuesta de sendSummary }
+        identificador:
+          type: string
+          pattern: '^(RA|RC)-\d{8}-\d{1,5}$'
+          example: RA-20261022-1
+          description: RA = comunicación de baja (/VoidedDocuments), RC = resumen diario (/SummaryDocuments)
+          x-ubl: { elemento: '/VoidedDocuments|/SummaryDocuments/cbc:ID' }
+        estado: { type: string, enum: [EN_PROCESO, ACEPTADO, RECHAZADO], description: 'statusCode de getStatus: 98 en proceso, 0 aceptado, 99 con errores' }
+        respuestaSunat: { $ref: '#/components/schemas/RespuestaSunatDto' }
+
+    ValidacionDocumentoResponse:
+      type: object
+      x-sunat: { regla: [RN-01, RN-02], fuente: Padrón RUC SUNAT }
+      properties:
+        valido: { type: boolean }
+        formatoValido: { type: boolean }
+        digitoVerificadorValido: { type: boolean }
+        razonSocial: { type: string, description: Se usa para R02 }
+        estado: { type: string, example: ACTIVO }
+        condicion: { type: string, example: HABIDO }
+        direccion: { type: string }
+
+    OrigenLegacyDto:
+      type: object
+      readOnly: true
+      description: Trazabilidad del dato migrado; no viaja en el XML UBL (matriz §4.6)
+      properties:
+        loteId: { type: string, format: uuid }
+        filaOrigen: { type: integer }
+        nroDocumentoLegacy: { type: string, description: 'Se conserva como referencia; nunca se usa como cbc:ID (RN-04)' }
+        hashFila: { type: string, description: SHA-256 de la fila original }
+
+    LoteMigracionResponse:
+      type: object
+      x-sunat: { regla: RN-13, norma: RS 234-2006 (Registro de Inventario Permanente) }
+      properties:
+        id: { type: string, format: uuid }
+        archivoOrigen: { type: string }
+        hashArchivo: { type: string }
+        estado: { type: string, enum: [CARGADO, VALIDADO, MIGRADO, CON_ERRORES, REVERTIDO] }
+        filasLeidas: { type: integer }
+        productosACrear: { type: integer }
+        movimientosACrear: { type: integer }
+        filasRechazadas:
+          type: array
+          items:
+            type: object
+            properties:
+              fila: { type: integer }
+              motivo: { type: string, example: Fecha inválida '31/02/2019' }
+        reconciliacion:
+          type: object
+          description: RN-13
+          properties:
+            cuadra: { type: boolean }
+            totalIngresosLegado: { type: number }
+            totalIngresosMigrado: { type: number }
+            totalSalidasLegado: { type: number }
+            totalSalidasMigrado: { type: number }
+
+    ErrorResponse:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo: { type: string, example: RUC_EMISOR_INVALIDO }
+        regla: { type: string, example: RN-01 }
+        mensaje: { type: string }
+        detalles:
+          type: array
+          items:
+            type: object
+            properties:
+              campo: { type: string, example: 'items[0].cantidad' }
+              elementoUbl: { type: string, example: 'cac:InvoiceLine[1]/cbc:InvoicedQuantity', description: Elemento XML afectado (coordina el error de la API con el de SUNAT) }
+              mensaje: { type: string }
+        codigoSunat: { type: string, description: Código de error/observación devuelto por SUNAT/OSE si aplica }
+
+# Servicios externos consumidos por los adaptadores de salida (no forman parte de la API propia)
+x-servicios-externos:
+  sunat-billService:
+    protocolo: SOAP 1.1 sobre HTTPS, WS-Security UsernameToken (RUC + usuario SOL secundario)
+    puerto: EnvioSunatPort
+    operaciones:
+      sendBill: "Envío síncrono de factura/boleta/nota (ZIP con XML firmado) -> applicationResponse (CDR ZIP)"
+      sendSummary: "Envío asíncrono de resumen diario (RC) o comunicación de baja (RA) -> ticket"
+      getStatus: "Consulta del ticket -> statusCode + CDR"
+    nombreArchivo: "{RUC}-{tipo}-{serie}-{correlativo}.zip, p. ej. 20123456789-01-F001-1.zip"
+  ose:
+    descripcion: Mismo contrato SOAP que SUNAT (sendBill, sendSummary, getStatus); cambia el endpoint y credenciales
+    puerto: EnvioSunatPort
+  padron-ruc:
+    descripcion: Consulta de estado y condición del contribuyente (RN-01, RN-02)
+    puerto: PadronRucPort
